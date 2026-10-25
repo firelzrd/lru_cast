@@ -203,7 +203,7 @@ Under `/sys/kernel/mm/lru_cast/`. **None needs setting**: the defaults are the d
 | Knob | Default | What it is |
 | :--- | :--- | :--- |
 | `version` | — | the release |
-| `enabled` | `1` | switch CAST off and on at run time (not if booted with `lru_cast=0`) |
+| `enabled` | `1` | switch CAST off and on at run time; switching it on while MGLRU is on is refused (`EBUSY`) |
 | `estimate` | — | anon's share of memory, the swappiness the measured costs amount to, and the costs |
 | `tune` | — | the controllers: per type the decay and W's share, and each simulated cache's misses |
 | `decay_auto` | `1` | the controllers set the decay and W's share; `0` leaves them as set by hand |
@@ -217,9 +217,9 @@ Under `/sys/kernel/mm/lru_cast/`. **None needs setting**: the defaults are the d
 | `walker` | `1` | the walker reads young bits of mapped pages |
 | `walker_simd` | `1` | read a page table's young bits with SIMD (x86-64) |
 | `prefetch` | by CPU | how far ahead the two prefetch stages reach (toward L3, toward L1); `0 0` = none |
-| `kcompressd` | `24` | per-node swap-out thread, queue depth −100..100; `0` off; below 0 also with CAST off |
+| `kcompressd` | `24` | per-node swap-out thread, queue depth −100..100; `0` off; above 0 only while CAST is on, below 0 whatever runs (CAST, MGLRU or the legacy LRU) |
 
-Boot: `lru_cast=0` starts with CAST off; its memory is not set up until it is first switched on.
+Boot: `lru_cast=0` starts with CAST off (and MGLRU on, if it is built with `CONFIG_LRU_GEN_ENABLED`); CAST's memory is not set up until it is first switched on.
 
 ---
 
@@ -239,29 +239,42 @@ Patches for each supported kernel are in [`patches/`](patches/):
 
 | Kernel | Patch |
 | :--- | :--- |
-| 6.12.74 | `0001-6.12.74-lru_cast-v0.1.0.patch` |
-| 6.16.12 | `0001-6.16.12-lru_cast-v0.1.0.patch` |
-| 6.18.22 | `0001-6.18.22-lru_cast-v0.1.0.patch` |
-| 7.2-rc1 | `0001-7.2-rc1-lru_cast-v0.1.0.patch` |
-| 7.3-rc7 | `0001-7.3-rc7-lru_cast-v0.1.0.patch` |
+| 6.12.74 | `0001-6.12.74-lru_cast-0.1.1.patch` |
+| 6.16.12 | `0001-6.16.12-lru_cast-0.1.1.patch` |
+| 6.18.22 | `0001-6.18.22-lru_cast-0.1.1.patch` |
+| 7.2-rc1 | `0001-7.2-rc1-lru_cast-0.1.1.patch` |
+| 7.3-rc7 | `0001-7.3-rc7-lru_cast-0.1.1.patch` |
 
 ```
 cd /path/to/linux
-patch -p1 < 0001-6.12.74-lru_cast-v0.1.0.patch
-scripts/config -d LRU_GEN -e LRU_CAST
+patch -p1 < 6.12.74-lru_cast-0.1.1.patch
+scripts/config -e LRU_CAST
 make olddefconfig
 make -j$(nproc)
 ```
 
-`CONFIG_LRU_CAST` (default `y`) needs a 64-bit kernel with MMU and SPARSEMEM, and excludes `CONFIG_LRU_GEN`: CAST and MGLRU hook the same places, so a kernel has one or the other. Memory cost: 4 bytes per page frame (1/1024 of RAM), attached per memory section as memory comes online, plus the controllers' sample.
+`CONFIG_LRU_CAST` (default `y`) needs a 64-bit kernel with MMU and SPARSEMEM. Memory cost: 4 bytes per page frame (1/1024 of RAM), attached per memory section as memory comes online, plus the controllers' sample.
 
 After boot:
 
 ```
 cat /sys/kernel/mm/lru_cast/enabled     # 1
-cat /sys/kernel/mm/lru_cast/version     # 0.1.0
-dmesg | grep CAST                       # CAST v0.1.0 by Masahito Suzuki
+cat /sys/kernel/mm/lru_cast/version     # 0.1.1
+dmesg | grep lru_cast                   # lru_cast v0.1.1 by Masahito Suzuki
 ```
+
+### With MGLRU
+
+CAST and MGLRU (`CONFIG_LRU_GEN`) can be built into the same kernel; they are never on at once. CAST is on at boot, and MGLRU starts off whatever `CONFIG_LRU_GEN_ENABLED` says; with `lru_cast=0`, MGLRU is as `CONFIG_LRU_GEN_ENABLED` says. At run time, switch one off before switching the other on: while either is on, switching the other on is refused with `EBUSY`.
+
+```
+echo 0 > /sys/kernel/mm/lru_cast/enabled   # CAST off: the legacy LRU runs
+echo y > /sys/kernel/mm/lru_gen/enabled    # MGLRU on
+echo n > /sys/kernel/mm/lru_gen/enabled    # MGLRU off
+echo 1 > /sys/kernel/mm/lru_cast/enabled   # CAST on
+```
+
+Each switch passes through the legacy LRU's lists, as MGLRU's own switch always has. The shadow entries one leaves are taken by the other as no history.
 
 ---
 
@@ -274,6 +287,7 @@ dmesg | grep CAST                       # CAST v0.1.0 by Masahito Suzuki
 | Linux 6.12, 6.16, 6.18, 7.2, 7.3 | ✅ working | built and run in QEMU, including lockdep builds |
 | cgroups | ✅ working | per-lruvec; 7.1+ reparenting tested in QEMU |
 | Memory hotplug | ✅ working | QEMU-tested |
+| MGLRU in the same kernel | ✅ working | one on at a time, switched under memory pressure; QEMU-tested with lockdep on all five kernels |
 | Throughput | ⚠️ known gap | 8–12% below MGLRU on swap-bound `stress-ng` |
 
 `mm/lru_cast/` and `include/linux/lru_cast.h` are **byte-identical on every supported kernel**. Kernel versions are told apart in one file, `compat/caps.h`, which turns `LINUX_VERSION_CODE` into named capabilities; `compat/kernel.h` picks the matching call. What differs per kernel is only the hooks in the rest of `mm/`. The capabilities, and where each begins:
