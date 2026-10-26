@@ -212,7 +212,7 @@ From [kcompressd-unofficial](https://github.com/firelzrd/kcompressd-unofficial),
 
 ### cgroups and memory hotplug
 
-CAST keeps its state per lruvec, as the stock lists do, so cgroup reclaim is the stock walk over each cgroup's lruvecs. A folio of M carries its lruvec's number in its state word; on 7.1 and later, where a cgroup taken offline splices its lists onto its parent's, the moved folios are retagged by a work item. Memory hotplug attaches and detaches the state array a section at a time.
+CAST keeps its state per lruvec, as the stock lists do, so cgroup reclaim is the stock walk over each cgroup's lruvecs. Which type reclaim takes from is decided on what the lruvec's own lists hold, not on the memcg's statistics, which the kernel sums up only every couple of seconds: a cgroup filling up to its `memory.max` would show nothing to take yet, and be OOM-killed with its pages unscanned. A folio of M carries its lruvec's number in its state word; on 7.1 and later, where a cgroup taken offline splices its lists onto its parent's, the moved folios are retagged by a work item. Memory hotplug attaches and detaches the state array a section at a time.
 
 ---
 
@@ -259,15 +259,15 @@ Patches for each supported kernel are in [`patches/`](patches/):
 
 | Kernel | Patch |
 | :--- | :--- |
-| 6.12.74 | `0001-6.12.74-lru_cast-v0.2.5.patch` |
-| 6.16.12 | `0001-6.16.12-lru_cast-v0.2.5.patch` |
-| 6.18.22 | `0001-6.18.22-lru_cast-v0.2.5.patch` |
-| 7.2-rc1 | `0001-7.2-rc1-lru_cast-v0.2.5.patch` |
-| 7.3-rc7 | `0001-7.3-rc7-lru_cast-v0.2.5.patch` |
+| 6.12.74 | `0001-6.12.74-lru_cast-v0.2.6.patch` |
+| 6.16.12 | `0001-6.16.12-lru_cast-v0.2.6.patch` |
+| 6.18.22 | `0001-6.18.22-lru_cast-v0.2.6.patch` |
+| 7.2.13 | `0001-7.2.13-lru_cast-v0.2.6.patch` |
+| 7.3-rc7 | `0001-7.3-rc7-lru_cast-v0.2.6.patch` |
 
 ```
 cd /path/to/linux
-patch -p1 < 0001-6.12.74-lru_cast-v0.2.5.patch
+patch -p1 < 0001-6.12.74-lru_cast-v0.2.6.patch
 scripts/config -e LRU_CAST
 make olddefconfig
 make -j$(nproc)
@@ -279,8 +279,8 @@ After boot:
 
 ```
 cat /sys/kernel/mm/lru_cast/enabled     # 1
-cat /sys/kernel/mm/lru_cast/version     # 0.2.5
-dmesg | grep lru_cast                   # lru_cast v0.2.5 by Masahito Suzuki
+cat /sys/kernel/mm/lru_cast/version     # 0.2.6
+dmesg | grep lru_cast                   # lru_cast v0.2.6 by Masahito Suzuki
 ```
 
 ### With MGLRU
@@ -305,7 +305,7 @@ Each switch passes through the legacy LRU's lists, as MGLRU's own switch always 
 | x86-64 (AVX-512 / AVX2 / SSE2) | ✅ working | the walker's SIMD path chosen at boot |
 | Other 64-bit architectures | ⚠️ untested | the generic walker builds; not yet run |
 | Linux 6.12, 6.16, 6.18, 7.2, 7.3 | ✅ working | built and run in QEMU, including lockdep builds |
-| cgroups | ✅ working | per-lruvec; 7.1+ reparenting tested in QEMU |
+| cgroups | ✅ working | per-lruvec; reclaim at `memory.max` and 7.1+ reparenting tested in QEMU |
 | Memory hotplug | ✅ working | QEMU-tested |
 | MGLRU in the same kernel | ✅ working | one on at a time, switched under memory pressure; QEMU-tested with lockdep on all five kernels |
 | Throughput | ✅ working | 12% above MGLRU on swap-bound `stress-ng` (QEMU, 0.2.5) |

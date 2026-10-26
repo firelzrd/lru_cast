@@ -1,7 +1,7 @@
-From 02fa54e00fa7d4dd682009ac16b814b1a4ffe42c Mon Sep 17 00:00:00 2001
+From cb9547236c79a8c447c4755b259d119a73fbe7b9 Mon Sep 17 00:00:00 2001
 From: Masahito S <firelzrd@gmail.com>
-Date: Mon, 26 Oct 2026 23:51:36 +0900
-Subject: [PATCH] 6.18.22-lru_cast-v0.2.5
+Date: Tue, 27 Oct 2026 07:29:46 +0900
+Subject: [PATCH] 6.18.22-lru_cast-v0.2.6
 
 ---
  include/linux/lru_cast.h           | 459 +++++++++++++++++
@@ -33,7 +33,7 @@ Subject: [PATCH] 6.18.22-lru_cast-v0.2.5
  mm/lru_cast/core/store.c           | 197 ++++++++
  mm/lru_cast/core/store.h           |  25 +
  mm/lru_cast/hooks.c                |  28 ++
- mm/lru_cast/policy/balance.c       | 240 +++++++++
+ mm/lru_cast/policy/balance.c       | 246 ++++++++++
  mm/lru_cast/policy/ghost.c         | 159 ++++++
  mm/lru_cast/policy/params.c        |  70 +++
  mm/lru_cast/policy/policy.h        |  78 +++
@@ -86,7 +86,7 @@ Subject: [PATCH] 6.18.22-lru_cast-v0.2.5
  mm/swap.h                          |  19 +
  mm/vmscan.c                        | 293 ++++++++++-
  mm/workingset.c                    |  27 +
- 82 files changed, 8605 insertions(+), 21 deletions(-)
+ 82 files changed, 8611 insertions(+), 21 deletions(-)
  create mode 100644 include/linux/lru_cast.h
  create mode 100644 mm/lru_cast/Makefile
  create mode 100755 mm/lru_cast/check-layers.sh
@@ -2807,10 +2807,10 @@ index 0000000000..3393f1e192
 +}
 diff --git a/mm/lru_cast/policy/balance.c b/mm/lru_cast/policy/balance.c
 new file mode 100644
-index 0000000000..b9eeddd739
+index 0000000000..12e6906a32
 --- /dev/null
 +++ b/mm/lru_cast/policy/balance.c
-@@ -0,0 +1,240 @@
+@@ -0,0 +1,246 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * CAST -- which type to take from, and the clean-file floor.
@@ -2987,13 +2987,19 @@ index 0000000000..b9eeddd739
 +	weight[LRU_CAST_FILE] = MAX_SWAPPINESS - sw;
 +}
 +
++/*
++ * What @lruvec holds of each type is read off its lists, as reclaim will
++ * scan them: a memcg's statistics are summed up only now and then, and a
++ * cgroup new to its limit can show none yet -- nothing to take, its
++ * reclaim scanning nothing, and the charge OOM.
++ */
 +int lru_cast_pick(struct lruvec *lruvec, int swappiness, int priority, bool anon_ok,
 +		   bool file_ok, u64 *weight)
 +{
-+	unsigned long anon = lruvec_page_state(lruvec, NR_INACTIVE_ANON) +
-+			     lruvec_page_state(lruvec, NR_ACTIVE_ANON);
-+	unsigned long file = lruvec_page_state(lruvec, NR_INACTIVE_FILE) +
-+			     lruvec_page_state(lruvec, NR_ACTIVE_FILE);
++	unsigned long anon = lru_cast_lru_size(lruvec, LRU_INACTIVE_ANON) +
++			     lru_cast_lru_size(lruvec, LRU_ACTIVE_ANON);
++	unsigned long file = lru_cast_lru_size(lruvec, LRU_INACTIVE_FILE) +
++			     lru_cast_lru_size(lruvec, LRU_ACTIVE_FILE);
 +	int pick;
 +
 +	if (swappiness <= 0)
@@ -7310,7 +7316,7 @@ index 0000000000..ac9d33c024
 +#endif /* _MM_LRU_CAST_TUNE_WSHARE_H */
 diff --git a/mm/lru_cast/version.h b/mm/lru_cast/version.h
 new file mode 100644
-index 0000000000..976adc5130
+index 0000000000..5db0516522
 --- /dev/null
 +++ b/mm/lru_cast/version.h
 @@ -0,0 +1,15 @@
@@ -7326,7 +7332,7 @@ index 0000000000..976adc5130
 +#define LRU_CAST_PROGNAME	"lru_cast"
 +#define LRU_CAST_AUTHOR	"Masahito Suzuki"
 +
-+#define LRU_CAST_VERSION	"0.2.5"
++#define LRU_CAST_VERSION	"0.2.6"
 +
 +#endif /* _MM_LRU_CAST_VERSION_H */
 diff --git a/mm/lru_cast/walk/bloom.c b/mm/lru_cast/walk/bloom.c
