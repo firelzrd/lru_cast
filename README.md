@@ -4,7 +4,7 @@ CAST is an out-of-tree page replacement policy for the Linux kernel, taking the 
 
 Two properties are what CAST is built for:
 
-- **Accuracy.** It evicts the pages least likely to be wanted again. Measured in QEMU against MGLRU and the legacy LRU, CAST reads back from swap **0.4–0.5×** as many pages as MGLRU and a fraction of what the legacy LRU does, and on a working set squeezed by a streaming read it is the only one of the three that keeps the working set ([Results](#results)).
+- **Accuracy.** It evicts the pages least likely to be wanted again. Measured in QEMU against MGLRU and the legacy LRU, CAST reads back from swap **about a quarter** as many pages as MGLRU (0.28×) and a tenth of what the legacy LRU does — and, choosing that well, gets **12% more work done than MGLRU** on the same workload ([Results](#results)).
 - **Swappiness that sets itself.** CAST measures how long tasks actually wait for an evicted page of each type to come back — a swap-in from zram, a file read from an NVMe or a spinning disk — and splits memory between anon and file where the total waiting is least. `vm.swappiness` is only where that estimate starts; the measurement takes over as it accumulates ([Swappiness](#swappiness-measured-not-guessed)).
 
 Of the two, accuracy is what a page replacement policy is for: a page evicted wrongly costs a task microseconds to milliseconds of waiting, where choosing well costs nanoseconds of CPU — see [Accuracy over throughput](#accuracy-over-throughput).
@@ -37,7 +37,7 @@ Legend — ✅ behaves as expected · ⚠️ works with a trade-off · ❌ not p
 | What a page is ranked by | ⚠️ recency, two buckets | ⚠️ recency, four generations (tiers add a little frequency for files read through `read()`) | ✅ frequency and recency (LRFU), a key in 1/16 half-life steps |
 | Rank tuning | — | — | ✅ the decay chosen by measurement, per type |
 | anon/file split | ⚠️ `vm.swappiness` as a fixed scan ratio, plus rules (`cache_trim_mode`, `file_is_tiny`) | ❌ `vm.swappiness` reduced to a per-generation hint | ✅ chosen from each type's measured miss-ratio curve and refault cost |
-| What a refault costs | ⚠️ counted as I/O events | ⚠️ counted as refaults | ✅ measured: the time a task waited, less its time queued behind others |
+| What a refault costs | ⚠️ counted as I/O events | ⚠️ counted as refaults | ✅ measured: the time a task waited, on each device apart and less its time queued behind others, plus what writing anon out takes |
 | Streaming read past a working set | ❌ working set evicted | ❌ working set evicted | ✅ newcomers wait in a window and must outrank the working set to stay |
 | Compression stall | ❌ kswapd blocks in `zswap_store` | ❌ same | ✅ per-node `kcompressd` writes the page and finishes its reclaim |
 | Clean-file floor | ❌ none | ❌ none | ✅ `clean_min_ratio` (from [le9uo](https://github.com/firelzrd/le9uo)) |
@@ -48,34 +48,36 @@ Legend — ✅ behaves as expected · ⚠️ works with a trade-off · ❌ not p
 
 ## Results
 
-Measured in QEMU (8 vCPUs pinned, 8 GB, zram swap with lz4) on Linux 6.12.
+Measured in QEMU (8 vCPUs pinned, 8 GB, zram swap with lz4) on Linux 6.12, CAST 0.2.5.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/results-dark.svg">
-  <img alt="Pages read back from swap per bogo op, mean of 3 runs: CAST 6.9, MGLRU 16.7, legacy LRU 64.2. Throughput, bogo ops/s: CAST 13.5k, MGLRU 15.5k, legacy LRU 9.1k." src="docs/results-light.svg">
+  <img alt="Pages read back from swap per bogo op, mean of 3 runs: CAST 4.4, MGLRU 15.9, legacy LRU 45.6. Throughput, bogo ops/s: CAST 22.1k, MGLRU 19.7k, legacy LRU 14.2k." src="docs/results-light.svg">
 </picture>
 
-### Accuracy: pages read back
+### Accuracy and throughput: pages read back
 
-`stress-ng --vm 8 --vm-bytes 9000M --vm-keep --vm-method write64` in 8 GB: a working set larger than memory, so every policy must evict, and every page it evicts wrongly comes back as a swap-in. Three interleaved runs each; pages per bogo operation:
+`stress-ng --vm 8 --vm-bytes 9000M --vm-keep --vm-method write64` in 8 GB for 90 seconds: a working set larger than memory, so every policy must evict, and every page it evicts wrongly comes back as a swap-in. Three interleaved runs each; pages per bogo operation, and operations per second:
 
-| Policy | Swap-ins (`pswpin`) | Swap-outs |
-| :--- | :--- | :--- |
-| **CAST** | **5.8 – 8.7** | **6.3 – 9.2** |
-| MGLRU | 15.0 – 17.7 | 15.7 – 18.0 |
-| Legacy LRU | 29.7 – 101.8 | 30.0 – 103.9 |
+| Policy | Swap-ins (`pswpin`) | Swap-outs | bogo ops/s |
+| :--- | :--- | :--- | :--- |
+| **CAST** | **4.31 – 4.48** | **4.43 – 4.54** | **21.6k – 23.1k** |
+| MGLRU | 14.4 – 16.7 | 14.5 – 16.8 | 19.1k – 20.6k |
+| Legacy LRU | 18.0 – 63.5 | 18.1 – 63.7 | 10.8k – 20.1k |
 
-CAST reads back **0.4–0.5×** what MGLRU does, and writes out about half as much. (`workingset_refault_anon` also counts zero-filled pages, which come back without I/O; `pswpin` counts only the reads.)
+CAST reads back **0.28×** what MGLRU does and writes out as little, run after run within 4% of itself — and does **12% more work** in the same time, the CPU it spends choosing more than repaid by the swap-ins it saves. (`workingset_refault_anon` also counts zero-filled pages, which come back without I/O; `pswpin` counts only the reads.)
+
+A loop over more than memory is where a policy that ranks by recency does worst: every page it evicts is the one about to be read again. CAST keeps the same part of such a loop in memory pass after pass (see [W and M](#w-and-m)), and lets the rest go.
 
 ### Accuracy: a working set under a streaming read
 
-A working set that fits in memory, read again and again, while `tail` streams a file larger than memory past it. Two runs each:
+A working set of 300 MB that fits in memory, read every 100 ms, while `tail /dev/zero` fills memory past it until it is killed. Two runs each:
 
 | Policy | Faults on the working set | Longest fault |
 | :--- | :--- | :--- |
-| **CAST** | **3 / 2** | **11 / 12 ms** |
-| MGLRU | 79,109 / 77,345 | 652 / 609 ms |
-| Legacy LRU | 76,841 / 24,817 | 636 / 214 ms |
+| **CAST** | **7 / 2** | **4.8 / 5.5 ms** |
+| MGLRU | 77,486 / 17 | 627 / 6.3 ms |
+| Legacy LRU | 15 / 16 | 3.6 / 3.3 ms |
 
 The stream's pages enter CAST's window with one read each; to stay, they must outrank pages read many times, and they cannot.
 
@@ -89,9 +91,9 @@ In the kernel: with cold anonymous memory next to a file working set larger than
 
 A page replacement policy exists for one job: to keep in memory the pages that will be wanted, so that nobody has to wait for them. Every page it gets wrong is paid for twice — once to write it out, and once more, by a task that stops and waits, to read it back. That wait is what a user feels: a window that does not redraw, a keystroke that lands late, a build that crawls. And it is orders of magnitude larger than the work of choosing. In the runs above, CAST measured a swap-in from zram at 10–20 µs; a read from an SSD takes tens to hundreds of microseconds, from a spinning disk milliseconds. Recording a read of a page costs CAST nanoseconds.
 
-A throughput benchmark under memory pressure hides this. `stress-ng` counts operations per second across all its workers: a fault that stalls one of them for 600 ms barely moves the average, and the CPU time a policy saves by choosing less carefully shows up as more operations. That is how, on the workload above, CAST can be 8–12% below MGLRU in operations per second while reading back less than half the pages — and how, with a working set under a streaming read, MGLRU leaves tasks waiting up to 650 ms on some 78,000 faults where CAST has two or three faults of about 11 ms.
+A throughput benchmark under memory pressure hides this. `stress-ng` counts operations per second across all its workers: a fault that stalls one of them for 600 ms barely moves the average, and the CPU time a policy saves by choosing less carefully shows up as more operations. With a working set under a streaming read, MGLRU left a task waiting up to 627 ms on some 77,000 faults in one run of two, where CAST had a handful of faults of about 5 ms in both.
 
-So CAST spends CPU to choose well: it records every read in the page's state word and keeps the sample's simulated caches. Even so it is faster than the legacy LRU on this workload, which loses its time to the pages it reads back. For a page replacement policy, accuracy is the measure; the CPU it costs is the price, and it is worth paying.
+So CAST spends CPU to choose well: it records every read in the page's state word and keeps the sample's simulated caches. On the workload above that is more than paid back — CAST does 12% more operations per second than MGLRU and half again as many as the legacy LRU, because it reads back a quarter of the pages MGLRU does. For a page replacement policy, accuracy is the measure; the CPU it costs is the price, and here the price comes back with interest.
 
 ---
 
@@ -138,17 +140,21 @@ Each type of each lruvec is a cache in two parts:
 
 While W is over its share, its tail meets M's lowest key; the lower goes. A page read once on its way through — a stream — goes; a page read again stays.
 
+Pages of one key — read in the same ticks, as many times — are told apart only by which is taken first, and that is chosen for what such ties are. Of pages read once, the sweep's order is kept: a clock, in which a page read again since it was found is passed over, and a newcomer from W wins a tie, being the one read last. Of pages read more than once, a tie is a loop's: a working set cycled through in turn. A loop larger than memory is served best by keeping the same part of itself, so these are ranked by a hash of the page frame — the same of them go first every time, spread evenly over the processes they belong to, and the rest stay and are hit on every pass. Ranked by the sweep's rotating cursor instead, a loop loses the pages it is about to read again.
+
 M's lowest is found by **sweeping the state words** in PFN order and keeping the 128 lowest keys as candidates: a per-lruvec bitmap of 256 blocks skips the parts of memory where M has no page, the sweep stops once it holds enough keys below the 1/16 quantile of the last pass, and each candidate is checked against its page before it is taken. Where the frames to be read next are known ahead — the candidates, young PTEs — they are pulled toward L3 and then L1 in two stages, as far ahead as the CPU's miss buffers allow.
 
 ### The controllers
 
 A sample of about 15,000 pages, chosen by block so that readahead runs stay whole, feeds simulated caches at once:
 
-- **the decay**: nine caches at the current half-life and ±1, 2, 4 and 8 steps from it. One that misses less by two standard deviations (a sign test on the accesses where they disagree) becomes the new centre;
-- **W's share**: two caches with W 10% of the type's pages smaller and larger, moved by a sequential test of the gradient;
+- **the decay**: nine caches at the current half-life and ±1, 2, 4 and 8 steps from it, from le 1 — a half-life of 128 times memory, close to LFU yet still ageing — to le 14. One that misses less by two standard deviations (a sign test on the accesses where they disagree) becomes the new centre. There is no le 0: with no decay a key is the read count alone, pages read 255 times or more tie, and a set read often once stays however long it is not;
+- **W's share**: two caches with W 10% of the type's pages smaller and larger, moved by a sequential test of the gradient, each step taken on evidence gathered since the last;
 - **the split**: each type's miss-ratio curve at 1/10 to 10/10 of memory, read from one order of the sample's pages, with readahead simulated at each point. The split that loses least — each type's misses weighed by what its refaults cost — is anon's share, moved only when another is better by two standard deviations.
 
 Reclaim presses both types toward the split rather than taking only from the type over it: a page of each type is pressed by how far its type is over its share, as a swappiness held within 1–199, like one an administrator sets. No type is ever left alone, and a type that will not give — anonymous memory in use — keeps its pages while the other gives in its place.
+
+Each simulated cache is the main cache in small, ties included: pages of one key are taken in the same order as there, so that what the controllers choose is chosen for the cache they set.
 
 Pages that are mapped and sampled are made `PROT_NONE`, as NUMA balancing does, so that every read of them faults and is seen (while NUMA balancing is off).
 
@@ -160,12 +166,14 @@ A read of a mapped page leaves only the PTE's young bit. Once a tick the walker 
 
 Each refault a task waits for is a sample: an anon major fault's swap-in, or a file fault or `read()` that waited for a page that came back with its history.
 
-A wait is timed as the device's work on it, not from asking to having: a page that queued behind others is not charged for their time. The waits of a type in flight together are a burst, and each is the time from the end before it to its own; the first to end is timed from the burst's start. The clock is read at a burst's start, at its last end and every 16 ends between, the ends since the last reading sharing the time alike, so that a storm of fast swap-ins costs no more for being timed.
+A wait is timed as the device's work on it, not from asking to having: a page that queued behind others is not charged for their time. Waits queue where they are served: a swap-in the task works off itself — a synchronous read from zram, a zswap hit, a zero-filled page — on its CPU; a read from a disk on that disk's queue, which swap and file on the same disk share. On each queue, the waits in flight together are a burst, and each is the time from the end before it to its own; the first to end is timed from the burst's start. The clock is read at a burst's start, at its last end and every 16 ends between, the ends since the last reading sharing the time alike, so that a storm of fast swap-ins costs no more for being timed.
+
+Evicting a file page costs nothing; evicting anon costs writing it out — compressing it, or submitting it to its device — and that time is measured too, on every path that writes anon out, and added to anon's cost: in the steady state every miss is also an eviction.
 
 Per type, CAST keeps the waits' sum and number, forgetting both by half once there have been as many as the LRUs hold pages:
 
 ```
-cost = (prior + sum of waits) / (1 + waits)
+cost = (prior + sum of waits) / (1 + waits)  [+ the cost of writing a page out, for anon]
 ```
 
 The prior is one sample in the ratio `vm.swappiness` gives, anon : file = (200 − s) : s. With no waits the cost is the prior; with many, it is what was measured. The split then weighs each type's misses by its cost: on zram, where a swap-in takes microseconds, anon is cheap to lose and the cache keeps more file; with swap on a slow disk, the other way round — without anyone setting anything.
@@ -173,11 +181,16 @@ The prior is one sample in the ratio `vm.swappiness` gives, anon : file = (200 �
 What this amounts to is shown, as the swappiness it equals, in `/sys/kernel/mm/lru_cast/estimate`:
 
 ```
-share 100/1000
-swappiness 99
-cost anon 15183 ns (4582 waits) file 15180 ns (0 waits)
-in flight anon 0 file 0
+share 0/1000
+swappiness 196
+cost anon 5522 ns (1034286 waits) file 348935 ns (15237 waits)
+swap-out 2432 ns (661733 pages)
+in flight 0
+cpu: anon 3667 ns (20692922) file 0 ns (0) swap-out 2696 ns (21034646)
+bdi 9: anon 0 ns (0) file 350346 ns (15035) swap-out 0 ns (0)
 ```
+
+Here anon is swapped to zram, read back on the CPU in under 4 µs, and file is read from a disk at 350 µs: the cache keeps file. Anon's part of memory counts what zram or zswap holds compressed as well as its pages on the lists — a page swapped to zram frees only what compressing it saves.
 
 Three values of `vm.swappiness` are promises, kept outside the measurement:
 
@@ -211,10 +224,10 @@ Under `/sys/kernel/mm/lru_cast/`. **None needs setting**: the defaults are the d
 | :--- | :--- | :--- |
 | `version` | — | the release |
 | `enabled` | `1` | switch CAST off and on at run time; switching it on while MGLRU is on is refused (`EBUSY`) |
-| `estimate` | — | anon's share of memory, the swappiness the measured costs amount to, the costs, and the waits in flight |
+| `estimate` | — | anon's share of memory, the swappiness the measured costs amount to, the costs, the cost of writing anon out, the waits in flight, and the same per queue (the CPUs, each device) |
 | `tune` | — | the controllers: per type the decay and W's share, and each simulated cache's misses |
 | `decay_auto` | `1` | the controllers set the decay and W's share; `0` leaves them as set by hand |
-| `decay` | measured | the decay per type, 0–14 (half-life C·2^(8−le) pages taken in; 0 = none). Writing stops `decay_auto` |
+| `decay` | measured | the decay per type, 1–14 (half-life C·2^(8−le) pages taken in). Writing stops `decay_auto` |
 | `w_permille` | measured | W's share per type, ‰ of its pages. Writing stops `decay_auto` |
 | `clean_min_ratio` | `10` | the clean-file floor, % of a node's memory; `0` = none |
 | `floor_held` | — | reclaim passes the floor held |
@@ -246,15 +259,15 @@ Patches for each supported kernel are in [`patches/`](patches/):
 
 | Kernel | Patch |
 | :--- | :--- |
-| 6.12.74 | `0001-6.12.74-lru_cast-v0.2.0.patch` |
-| 6.16.12 | `0001-6.16.12-lru_cast-v0.2.0.patch` |
-| 6.18.22 | `0001-6.18.22-lru_cast-v0.2.0.patch` |
-| 7.2-rc1 | `0001-7.2-rc1-lru_cast-v0.2.0.patch` |
-| 7.3-rc7 | `0001-7.3-rc7-lru_cast-v0.2.0.patch` |
+| 6.12.74 | `0001-6.12.74-lru_cast-v0.2.5.patch` |
+| 6.16.12 | `0001-6.16.12-lru_cast-v0.2.5.patch` |
+| 6.18.22 | `0001-6.18.22-lru_cast-v0.2.5.patch` |
+| 7.2-rc1 | `0001-7.2-rc1-lru_cast-v0.2.5.patch` |
+| 7.3-rc7 | `0001-7.3-rc7-lru_cast-v0.2.5.patch` |
 
 ```
 cd /path/to/linux
-patch -p1 < 0001-6.12.74-lru_cast-v0.2.0.patch
+patch -p1 < 0001-6.12.74-lru_cast-v0.2.5.patch
 scripts/config -e LRU_CAST
 make olddefconfig
 make -j$(nproc)
@@ -266,8 +279,8 @@ After boot:
 
 ```
 cat /sys/kernel/mm/lru_cast/enabled     # 1
-cat /sys/kernel/mm/lru_cast/version     # 0.2.0
-dmesg | grep lru_cast                   # lru_cast v0.2.0 by Masahito Suzuki
+cat /sys/kernel/mm/lru_cast/version     # 0.2.5
+dmesg | grep lru_cast                   # lru_cast v0.2.5 by Masahito Suzuki
 ```
 
 ### With MGLRU
@@ -295,7 +308,7 @@ Each switch passes through the legacy LRU's lists, as MGLRU's own switch always 
 | cgroups | ✅ working | per-lruvec; 7.1+ reparenting tested in QEMU |
 | Memory hotplug | ✅ working | QEMU-tested |
 | MGLRU in the same kernel | ✅ working | one on at a time, switched under memory pressure; QEMU-tested with lockdep on all five kernels |
-| Throughput | ⚠️ known gap | 8–12% below MGLRU on swap-bound `stress-ng` |
+| Throughput | ✅ working | 12% above MGLRU on swap-bound `stress-ng` (QEMU, 0.2.5) |
 
 `mm/lru_cast/` and `include/linux/lru_cast.h` are **byte-identical on every supported kernel**. Kernel versions are told apart in one file, `compat/caps.h`, which turns `LINUX_VERSION_CODE` into named capabilities; `compat/kernel.h` picks the matching call. What differs per kernel is only the hooks in the rest of `mm/`. The capabilities, and where each begins:
 

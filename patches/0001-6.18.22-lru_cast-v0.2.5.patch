@@ -1,15 +1,15 @@
-From 560d171a2c08e0824a90e7c098ff93c88c73e63c Mon Sep 17 00:00:00 2001
+From 02fa54e00fa7d4dd682009ac16b814b1a4ffe42c Mon Sep 17 00:00:00 2001
 From: Masahito S <firelzrd@gmail.com>
-Date: Mon, 26 Oct 2026 12:18:43 +0900
-Subject: [PATCH] 7.2-rc1-lru_cast-v0.2.0
+Date: Mon, 26 Oct 2026 23:51:36 +0900
+Subject: [PATCH] 6.18.22-lru_cast-v0.2.5
 
 ---
- include/linux/lru_cast.h           | 340 ++++++++++++++
+ include/linux/lru_cast.h           | 459 +++++++++++++++++
  include/linux/mm_inline.h          |  14 +-
  include/linux/mm_types.h           |  21 +
- include/linux/mmzone.h             |  90 ++++
+ include/linux/mmzone.h             |  91 ++++
  include/linux/page-flags.h         |   7 +
- include/linux/sched.h              |   4 +
+ include/linux/sched.h              |   6 +
  include/trace/events/mmflags.h     |   9 +-
  kernel/sched/core.c                |   3 +
  mm/Kconfig                         |  20 +-
@@ -20,56 +20,56 @@ Subject: [PATCH] 7.2-rc1-lru_cast-v0.2.0
  mm/lru_cast/Makefile               |  30 ++
  mm/lru_cast/check-layers.sh        |  58 +++
  mm/lru_cast/compat/caps.h          |  66 +++
- mm/lru_cast/compat/kernel.h        | 183 ++++++++
- mm/lru_cast/compat/vmap.h          |  27 ++
- mm/lru_cast/control.c              | 208 +++++++++
+ mm/lru_cast/compat/kernel.h        | 183 +++++++
+ mm/lru_cast/compat/vmap.h          |  27 +
+ mm/lru_cast/control.c              | 208 ++++++++
  mm/lru_cast/control.h              |  15 +
  mm/lru_cast/core/clock.c           | 129 +++++
- mm/lru_cast/core/core.h            |  92 ++++
- mm/lru_cast/core/key.c             | 166 +++++++
+ mm/lru_cast/core/core.h            | 100 ++++
+ mm/lru_cast/core/key.c             | 167 +++++++
  mm/lru_cast/core/prefetch.c        |  76 +++
  mm/lru_cast/core/prefetch.h        |  60 +++
- mm/lru_cast/core/state.c           | 241 ++++++++++
+ mm/lru_cast/core/state.c           | 240 +++++++++
  mm/lru_cast/core/store.c           | 197 ++++++++
  mm/lru_cast/core/store.h           |  25 +
  mm/lru_cast/hooks.c                |  28 ++
- mm/lru_cast/policy/balance.c       | 201 ++++++++
- mm/lru_cast/policy/ghost.c         | 159 +++++++
- mm/lru_cast/policy/params.c        |  69 +++
- mm/lru_cast/policy/policy.h        |  78 ++++
- mm/lru_cast/policy/reclaim.c       | 184 ++++++++
- mm/lru_cast/policy/ring.c          | 724 +++++++++++++++++++++++++++++
- mm/lru_cast/sysfs.c                | 293 ++++++++++++
- mm/lru_cast/tune/cost.c            | 245 ++++++++++
+ mm/lru_cast/policy/balance.c       | 240 +++++++++
+ mm/lru_cast/policy/ghost.c         | 159 ++++++
+ mm/lru_cast/policy/params.c        |  70 +++
+ mm/lru_cast/policy/policy.h        |  78 +++
+ mm/lru_cast/policy/reclaim.c       | 184 +++++++
+ mm/lru_cast/policy/ring.c          | 760 +++++++++++++++++++++++++++++
+ mm/lru_cast/sysfs.c                | 293 +++++++++++
+ mm/lru_cast/tune/cost.c            | 504 +++++++++++++++++++
  mm/lru_cast/tune/cost.h            |  12 +
  mm/lru_cast/tune/decay.c           |  76 +++
  mm/lru_cast/tune/decay.h           |  14 +
  mm/lru_cast/tune/evidence.c        |  89 ++++
  mm/lru_cast/tune/evidence.h        |  37 ++
- mm/lru_cast/tune/protect.c         | 213 +++++++++
+ mm/lru_cast/tune/protect.c         | 213 ++++++++
  mm/lru_cast/tune/readahead.c       |  64 +++
  mm/lru_cast/tune/sample.c          |  35 ++
  mm/lru_cast/tune/sample.h          |  24 +
  mm/lru_cast/tune/shape.h           |  60 +++
- mm/lru_cast/tune/share.c           | 105 +++++
+ mm/lru_cast/tune/share.c           | 105 ++++
  mm/lru_cast/tune/share.h           |  12 +
- mm/lru_cast/tune/sim.c             | 607 ++++++++++++++++++++++++
- mm/lru_cast/tune/sim.h             |  53 +++
- mm/lru_cast/tune/tune.c            | 338 ++++++++++++++
+ mm/lru_cast/tune/sim.c             | 644 ++++++++++++++++++++++++
+ mm/lru_cast/tune/sim.h             |  53 ++
+ mm/lru_cast/tune/tune.c            | 338 +++++++++++++
  mm/lru_cast/tune/tune.h            |  97 ++++
  mm/lru_cast/tune/world.c           |  56 +++
  mm/lru_cast/tune/world.h           |  15 +
  mm/lru_cast/tune/wshare.c          |  82 ++++
- mm/lru_cast/tune/wshare.h          |  22 +
+ mm/lru_cast/tune/wshare.h          |  21 +
  mm/lru_cast/version.h              |  15 +
  mm/lru_cast/walk/bloom.c           |  65 +++
  mm/lru_cast/walk/lookaround.c      | 101 ++++
- mm/lru_cast/walk/simd.h            |  27 ++
+ mm/lru_cast/walk/simd.h            |  27 +
  mm/lru_cast/walk/simd_generic.c    |  34 ++
  mm/lru_cast/walk/simd_x86.c        |  70 +++
  mm/lru_cast/walk/simd_x86_avx2.S   | 170 +++++++
  mm/lru_cast/walk/simd_x86_avx512.S | 220 +++++++++
- mm/lru_cast/walk/simd_x86_sse2.S   | 158 +++++++
+ mm/lru_cast/walk/simd_x86_sse2.S   | 158 ++++++
  mm/lru_cast/walk/walk.c            | 307 ++++++++++++
  mm/lru_cast/walk/walk.h            |  28 ++
  mm/lru_cast/walk/young.h           |  58 +++
@@ -79,14 +79,14 @@ Subject: [PATCH] 7.2-rc1-lru_cast-v0.2.0
  mm/mm_init.c                       |   3 +
  mm/mmzone.c                        |   2 +
  mm/page_alloc.c                    |   2 +
- mm/page_io.c                       | 317 ++++++++++++-
+ mm/page_io.c                       | 358 +++++++++++++-
  mm/rmap.c                          |   3 +
  mm/shmem.c                         |   4 +
- mm/swap.c                          |  17 +
+ mm/swap.c                          |  15 +
  mm/swap.h                          |  19 +
- mm/vmscan.c                        | 293 +++++++++++-
- mm/workingset.c                    |  27 ++
- 82 files changed, 8065 insertions(+), 21 deletions(-)
+ mm/vmscan.c                        | 293 ++++++++++-
+ mm/workingset.c                    |  27 +
+ 82 files changed, 8605 insertions(+), 21 deletions(-)
  create mode 100644 include/linux/lru_cast.h
  create mode 100644 mm/lru_cast/Makefile
  create mode 100755 mm/lru_cast/check-layers.sh
@@ -147,10 +147,10 @@ Subject: [PATCH] 7.2-rc1-lru_cast-v0.2.0
 
 diff --git a/include/linux/lru_cast.h b/include/linux/lru_cast.h
 new file mode 100644
-index 0000000000..0adb26f30d
+index 0000000000..9cd62e7635
 --- /dev/null
 +++ b/include/linux/lru_cast.h
-@@ -0,0 +1,340 @@
+@@ -0,0 +1,459 @@
 +/* SPDX-License-Identifier: GPL-2.0 */
 +/*
 + * CAST -- what the rest of the kernel sees (mm/lru_cast/).
@@ -167,6 +167,7 @@ index 0000000000..0adb26f30d
 +
 +struct folio;
 +struct page;
++struct address_space;
 +
 +/* lru_cast_pick(): what a reclaim call takes from */
 +#define LRU_CAST_ANON		0
@@ -246,23 +247,103 @@ index 0000000000..0adb26f30d
 +void lru_cast_access_kept(struct folio *folio);
 +bool lru_cast_protfault(struct folio *folio);
 +void lru_cast_swapin(struct folio *folio);
-+void __lru_cast_wait_begin(int type, bool refault);
++void __lru_cast_wait_begin(int type, bool refault, u64 dev);
++void __lru_cast_wait_queued(u64 dev);
++void __lru_cast_wait_begin_file(bool refault, struct address_space *mapping);
 +void __lru_cast_wait_end(bool done);
++void __lru_cast_evict_cpu(u64 t0, unsigned long nr);
++void __lru_cast_evict_io_begin(u64 dev);
++void __lru_cast_evict_io_end(u64 dev, unsigned long nr);
++
++/*
++ * Writing out @nr pages of anon (tune/cost.c): done by the CPU since @t0
++ * (lru_cast_evict_start()), or queued on device @dev from submission to
++ * completion.
++ */
++static inline u64 lru_cast_evict_start(void)
++{
++	return lru_cast_enabled() ? ktime_get_ns() : 0;
++}
++
++static inline void lru_cast_evict_cpu(u64 t0, unsigned long nr)
++{
++	if (t0)
++		__lru_cast_evict_cpu(t0, nr);
++}
++
++static inline void lru_cast_evict_io_begin(u64 dev)
++{
++	if (lru_cast_enabled())
++		__lru_cast_evict_io_begin(dev);
++}
++
++static inline void lru_cast_evict_io_end(u64 dev, unsigned long nr)
++{
++	if (lru_cast_enabled())
++		__lru_cast_evict_io_end(dev, nr);
++}
 +bool lru_cast_refaulted(struct folio *folio);
 +
 +/*
-+ * A task's wait for a page of @type to come in, from where it is known to
-+ * wait to where the call that waited returns (tune/cost.c): begun inside,
-+ * where the page is found not in; its refault told when known; ended by the
++ * A task's wait for a page of @type to come in (tune/cost.c), timed on the
++ * queue that does the work: a device's -- @dev, the id of its
++ * backing_dev_info (0: none known) -- or the CPU the task is on, when the
++ * task does it itself (LRU_CAST_DEV_CPU): a swap-in from zram, a zswap
++ * hit, a page that was all zeroes. Begun inside, where the task is known
++ * to wait for a page not in; its refault told when known; ended by the
 + * caller that every return of the inside passes through -- @done, unless
 + * the task gave up or was told not to wait.
++ *
++ * A swap-in: the fault names the entry it waits for, swap_read_folio()
++ * begins the wait when it reads that entry -- not for the pages read ahead
++ * with it -- on the CPU, and moves it to the device's queue if the page is
++ * read from one.
 + */
++#define LRU_CAST_DEV_CPU	U64_MAX
++#define LRU_CAST_WAIT_TYPE	0x03	/* 1 + its type */
++#define LRU_CAST_WAIT_CPU	0x40	/* on the CPU's queue, not a device's */
 +#define LRU_CAST_WAIT_REFAULT	0x80
 +
-+static inline void lru_cast_wait_begin(int type, bool refault)
++static inline void lru_cast_wait_begin(int type, bool refault, u64 dev)
 +{
 +	if (lru_cast_enabled())
-+		__lru_cast_wait_begin(type, refault);
++		__lru_cast_wait_begin(type, refault, dev);
++}
++
++/* a wait for a page of @mapping, on the device it is read from */
++static inline void lru_cast_wait_begin_file(bool refault, struct address_space *mapping)
++{
++	if (lru_cast_enabled())
++		__lru_cast_wait_begin_file(refault, mapping);
++}
++
++/* a fault about to read swap entry @val */
++static inline void lru_cast_wait_swapin(unsigned long val)
++{
++	if (lru_cast_enabled())
++		current->lru_cast_wait_swap = val;
++}
++
++/* swap_read_folio() of the entries @first.. (@nr): the fault's own? */
++static inline bool lru_cast_wait_swap_mine(unsigned long first, unsigned long nr)
++{
++	unsigned long want = current->lru_cast_wait_swap;
++
++	return unlikely(want) && want - first < nr;
++}
++
++/* the fault's own entry read: its wait begins, on the CPU */
++static inline void lru_cast_wait_swap_read(unsigned long first, unsigned long nr)
++{
++	if (lru_cast_wait_swap_mine(first, nr) && !current->lru_cast_wait)
++		__lru_cast_wait_begin(LRU_CAST_ANON, true, LRU_CAST_DEV_CPU);
++}
++
++/* ... and read from device @dev: it queues there (asked once it is the fault's own) */
++static inline void lru_cast_wait_swap_queued(u64 dev)
++{
++	if (current->lru_cast_wait & LRU_CAST_WAIT_CPU)
++		__lru_cast_wait_queued(dev);
 +}
 +
 +static inline void lru_cast_wait_refault(bool refault)
@@ -273,7 +354,7 @@ index 0000000000..0adb26f30d
 +
 +static inline void lru_cast_wait_end(bool done)
 +{
-+	if (unlikely(current->lru_cast_wait))
++	if (unlikely(current->lru_cast_wait || current->lru_cast_wait_swap))
 +		__lru_cast_wait_end(done);
 +}
 +void lru_cast_access_seen(struct folio *folio, bool referenced);
@@ -420,7 +501,45 @@ index 0000000000..0adb26f30d
 +}
 +
 +
-+static inline void lru_cast_wait_begin(int type, bool refault)
++static inline void lru_cast_wait_begin(int type, bool refault, u64 dev)
++{
++}
++
++static inline void lru_cast_wait_begin_file(bool refault, struct address_space *mapping)
++{
++}
++
++static inline u64 lru_cast_evict_start(void)
++{
++	return 0;
++}
++
++static inline void lru_cast_evict_cpu(u64 t0, unsigned long nr)
++{
++}
++
++static inline void lru_cast_evict_io_begin(u64 dev)
++{
++}
++
++static inline void lru_cast_evict_io_end(u64 dev, unsigned long nr)
++{
++}
++
++static inline void lru_cast_wait_swapin(unsigned long val)
++{
++}
++
++static inline bool lru_cast_wait_swap_mine(unsigned long first, unsigned long nr)
++{
++	return false;
++}
++
++static inline void lru_cast_wait_swap_read(unsigned long first, unsigned long nr)
++{
++}
++
++static inline void lru_cast_wait_swap_queued(u64 dev)
 +{
 +}
 +
@@ -492,35 +611,33 @@ index 0000000000..0adb26f30d
 +
 +#endif /* _LINUX_LRU_CAST_H */
 diff --git a/include/linux/mm_inline.h b/include/linux/mm_inline.h
-index a8430a7ae0..809ca62048 100644
+index f6a2b2d200..e663908996 100644
 --- a/include/linux/mm_inline.h
 +++ b/include/linux/mm_inline.h
 @@ -9,6 +9,7 @@
  #include <linux/string.h>
  #include <linux/userfaultfd_k.h>
- #include <linux/leafops.h>
+ #include <linux/swapops.h>
 +#include <linux/lru_cast.h>
  
  /**
   * folio_is_file_lru - Should the folio be on a file LRU or anon LRU?
-@@ -103,7 +104,8 @@ static inline bool lru_gen_switching(void)
+@@ -102,7 +103,8 @@ static __always_inline enum lru_list folio_lru_list(const struct folio *folio)
  
- 	return static_branch_unlikely(&lru_switch);
- }
+ #ifdef CONFIG_LRU_GEN
+ 
 -#ifdef CONFIG_LRU_GEN_ENABLED
 +/* as mm/vmscan.c's lru_gen_caps */
 +#if defined(CONFIG_LRU_GEN_ENABLED) && !defined(CONFIG_LRU_CAST)
  static inline bool lru_gen_enabled(void)
  {
  	DECLARE_STATIC_KEY_TRUE(lru_gen_caps[NR_LRU_GEN_CAPS]);
-@@ -346,12 +348,15 @@ static inline void folio_migrate_refs(struct folio *new, const struct folio *old
+@@ -340,10 +342,13 @@ static inline void folio_migrate_refs(struct folio *new, const struct folio *old
  static __always_inline
  void lruvec_add_folio(struct lruvec *lruvec, struct folio *folio)
  {
 -	enum lru_list lru = folio_lru_list(folio);
 +	enum lru_list lru;
- 
- 	VM_WARN_ON_ONCE_FOLIO(!folio_matches_lruvec(folio, lruvec), folio);
  
  	if (lru_gen_add_folio(lruvec, folio, false))
  		return;
@@ -530,14 +647,12 @@ index a8430a7ae0..809ca62048 100644
  
  	update_lru_size(lruvec, lru, folio_zonenum(folio),
  			folio_nr_pages(folio));
-@@ -362,12 +367,15 @@ void lruvec_add_folio(struct lruvec *lruvec, struct folio *folio)
+@@ -354,10 +359,13 @@ void lruvec_add_folio(struct lruvec *lruvec, struct folio *folio)
  static __always_inline
  void lruvec_add_folio_tail(struct lruvec *lruvec, struct folio *folio)
  {
 -	enum lru_list lru = folio_lru_list(folio);
 +	enum lru_list lru;
- 
- 	VM_WARN_ON_ONCE_FOLIO(!folio_matches_lruvec(folio, lruvec), folio);
  
  	if (lru_gen_add_folio(lruvec, folio, true))
  		return;
@@ -548,10 +663,10 @@ index a8430a7ae0..809ca62048 100644
  	update_lru_size(lruvec, lru, folio_zonenum(folio),
  			folio_nr_pages(folio));
 diff --git a/include/linux/mm_types.h b/include/linux/mm_types.h
-index b18c2b2e7d..3baea6fba8 100644
+index 8b1045c51e..12bf7dfc9d 100644
 --- a/include/linux/mm_types.h
 +++ b/include/linux/mm_types.h
-@@ -1404,6 +1404,15 @@ struct mm_struct {
+@@ -1227,6 +1227,15 @@ struct mm_struct {
  #ifdef CONFIG_MM_ID
  		mm_id_t mm_id;
  #endif /* CONFIG_MM_ID */
@@ -567,7 +682,7 @@ index b18c2b2e7d..3baea6fba8 100644
  	} __randomize_layout;
  
  	/*
-@@ -1527,6 +1536,18 @@ static inline void lru_gen_use_mm(struct mm_struct *mm)
+@@ -1349,6 +1358,18 @@ static inline void lru_gen_use_mm(struct mm_struct *mm)
  
  #endif /* CONFIG_LRU_GEN_WALKS_MMU */
  
@@ -587,18 +702,19 @@ index b18c2b2e7d..3baea6fba8 100644
  	struct ma_state mas;
  };
 diff --git a/include/linux/mmzone.h b/include/linux/mmzone.h
-index ca27121871..c9b44cc356 100644
+index 7fb7331c57..79dd2d01a3 100644
 --- a/include/linux/mmzone.h
 +++ b/include/linux/mmzone.h
-@@ -24,6 +24,7 @@
+@@ -23,6 +23,8 @@
+ #include <linux/page-flags.h>
  #include <linux/local_lock.h>
  #include <linux/zswap.h>
- #include <linux/sizes.h>
++#include <linux/sizes.h>
 +#include <linux/kfifo.h>
  #include <asm/page.h>
  
  /* Free memory management - zoned buddy allocator.  */
-@@ -755,6 +756,73 @@ void lru_gen_reparent_memcg(struct mem_cgroup *memcg, struct mem_cgroup *parent,
+@@ -666,6 +668,73 @@ static inline void lru_gen_soft_reclaim(struct mem_cgroup *memcg, int nid)
  
  #endif /* CONFIG_LRU_GEN */
  
@@ -672,7 +788,7 @@ index ca27121871..c9b44cc356 100644
  struct lruvec {
  	struct list_head		lists[NR_LRU_LISTS];
  	/* per lruvec lru_lock for memcg */
-@@ -780,6 +848,11 @@ struct lruvec {
+@@ -691,6 +760,11 @@ struct lruvec {
  	struct lru_gen_mm_state		mm_state;
  #endif
  #endif /* CONFIG_LRU_GEN */
@@ -684,7 +800,7 @@ index ca27121871..c9b44cc356 100644
  #ifdef CONFIG_MEMCG
  	struct pglist_data *pgdat;
  #endif
-@@ -1522,6 +1595,20 @@ typedef struct pglist_data {
+@@ -1442,6 +1516,20 @@ typedef struct pglist_data {
  
  	atomic_t kswapd_failures;	/* Number of 'reclaimed == 0' runs */
  
@@ -705,7 +821,7 @@ index ca27121871..c9b44cc356 100644
  #ifdef CONFIG_COMPACTION
  	int kcompactd_max_order;
  	enum zone_type kcompactd_highest_zoneidx;
-@@ -1586,6 +1673,9 @@ typedef struct pglist_data {
+@@ -1510,6 +1598,9 @@ typedef struct pglist_data {
  	/* lru_gen_folio list */
  	struct lru_gen_memcg memcg_lru;
  #endif
@@ -716,7 +832,7 @@ index ca27121871..c9b44cc356 100644
  	CACHELINE_PADDING(_pad2_);
  
 diff --git a/include/linux/page-flags.h b/include/linux/page-flags.h
-index 7223f6f4e2..c7ee459c9d 100644
+index 0091ad1986..afe021c73e 100644
 --- a/include/linux/page-flags.h
 +++ b/include/linux/page-flags.h
 @@ -126,6 +126,9 @@ enum pageflags {
@@ -729,7 +845,7 @@ index 7223f6f4e2..c7ee459c9d 100644
  #endif
  	__NR_PAGEFLAGS,
  
-@@ -634,6 +637,10 @@ FOLIO_CLEAR_FLAG(swapcache, FOLIO_HEAD_PAGE)
+@@ -640,6 +643,10 @@ FOLIO_CLEAR_FLAG(swapcache, FOLIO_HEAD_PAGE)
  FOLIO_FLAG_FALSE(swapcache)
  #endif
  
@@ -741,22 +857,24 @@ index 7223f6f4e2..c7ee459c9d 100644
  	__FOLIO_CLEAR_FLAG(unevictable, FOLIO_HEAD_PAGE)
  	FOLIO_TEST_CLEAR_FLAG(unevictable, FOLIO_HEAD_PAGE)
 diff --git a/include/linux/sched.h b/include/linux/sched.h
-index 373bcc0598..8196bfdc48 100644
+index 3e2005e9e2..9ada422b80 100644
 --- a/include/linux/sched.h
 +++ b/include/linux/sched.h
-@@ -1306,6 +1306,10 @@ struct task_struct {
+@@ -1290,6 +1290,12 @@ struct task_struct {
  
  	/* VM state: */
  	struct reclaim_state		*reclaim_state;
 +#ifdef CONFIG_LRU_CAST
 +	/* CAST: the wait for a page to come in the task is in (mm/lru_cast/tune/cost.c) */
 +	u8				lru_cast_wait;
++	u16				lru_cast_wait_where;	/* its CPU, or its device's place */
++	unsigned long			lru_cast_wait_swap;	/* the swap entry a fault waits for */
 +#endif
  
  	struct io_context		*io_context;
  
 diff --git a/include/trace/events/mmflags.h b/include/trace/events/mmflags.h
-index a6e5a44c9b..c713335aa3 100644
+index aa441f593e..4f7272601f 100644
 --- a/include/trace/events/mmflags.h
 +++ b/include/trace/events/mmflags.h
 @@ -137,6 +137,12 @@ TRACE_DEFINE_ENUM(___GFP_LAST_BIT);
@@ -783,18 +901,18 @@ index a6e5a44c9b..c713335aa3 100644
  #define show_page_flags(flags)						\
  	(flags) ? __print_flags(flags, "|",				\
 diff --git a/kernel/sched/core.c b/kernel/sched/core.c
-index 96226707c2..8227dd3606 100644
+index 582c3847f4..05a5c8fddd 100644
 --- a/kernel/sched/core.c
 +++ b/kernel/sched/core.c
-@@ -5488,6 +5488,7 @@ context_switch(struct rq *rq, struct task_struct *prev,
+@@ -5313,6 +5313,7 @@ context_switch(struct rq *rq, struct task_struct *prev,
  		 */
  		switch_mm_irqs_off(prev->active_mm, next->mm, next);
  		lru_gen_use_mm(next->mm);
 +		lru_cast_use_mm(next->mm);
  
- 		if (!prev->mm) {			// from kernel
+ 		if (!prev->mm) {                        // from kernel
  			/* will mmdrop_lazy_tlb() in finish_task_switch(). */
-@@ -5778,6 +5779,8 @@ void sched_tick(void)
+@@ -5594,6 +5595,8 @@ void sched_tick(void)
  	donor = rq->donor;
  
  	psi_account_irqtime(rq, donor, NULL);
@@ -804,10 +922,10 @@ index 96226707c2..8227dd3606 100644
  	update_rq_clock(rq);
  	hw_pressure = arch_scale_hw_pressure(cpu_of(rq));
 diff --git a/mm/Kconfig b/mm/Kconfig
-index 9e0ca48249..129b3749ac 100644
+index 76001e9ba0..00a8a9f29d 100644
 --- a/mm/Kconfig
 +++ b/mm/Kconfig
-@@ -1406,6 +1406,23 @@ config PTE_MARKER_UFFD_WP
+@@ -1300,6 +1300,23 @@ config PTE_MARKER_UFFD_WP
  endif # USERFAULTFD
  
  # multi-gen LRU {
@@ -831,7 +949,7 @@ index 9e0ca48249..129b3749ac 100644
  config LRU_GEN
  	bool "Multi-Gen LRU"
  	depends on MMU
-@@ -1419,7 +1436,8 @@ config LRU_GEN_ENABLED
+@@ -1313,7 +1330,8 @@ config LRU_GEN_ENABLED
  	bool "Enable by default"
  	depends on LRU_GEN
  	help
@@ -842,7 +960,7 @@ index 9e0ca48249..129b3749ac 100644
  config LRU_GEN_STATS
  	bool "Full stats for debugging"
 diff --git a/mm/Makefile b/mm/Makefile
-index eff9f9e7e0..eb2a970e58 100644
+index 21abb33535..d7d14cbcd5 100644
 --- a/mm/Makefile
 +++ b/mm/Makefile
 @@ -75,6 +75,7 @@ ifdef CONFIG_MMU
@@ -854,7 +972,7 @@ index eff9f9e7e0..eb2a970e58 100644
  obj-$(CONFIG_ZSWAP)	+= zswap.o
  obj-$(CONFIG_HAS_DMA)	+= dmapool.o
 diff --git a/mm/filemap.c b/mm/filemap.c
-index 5af62e6abc..70b483be03 100644
+index 8a7f4ce69a..97f3b92e4a 100644
 --- a/mm/filemap.c
 +++ b/mm/filemap.c
 @@ -21,6 +21,7 @@
@@ -862,10 +980,10 @@ index 5af62e6abc..70b483be03 100644
  #include <linux/mm.h>
  #include <linux/swap.h>
 +#include <linux/lru_cast.h>
- #include <linux/leafops.h>
+ #include <linux/swapops.h>
  #include <linux/syscalls.h>
  #include <linux/mman.h>
-@@ -2550,7 +2551,7 @@ static bool filemap_range_uptodate(struct address_space *mapping,
+@@ -2489,7 +2490,7 @@ static bool filemap_range_uptodate(struct address_space *mapping,
  	return mapping->a_ops->is_partially_uptodate(folio, pos, count);
  }
  
@@ -874,7 +992,7 @@ index 5af62e6abc..70b483be03 100644
  		struct address_space *mapping, size_t count,
  		struct folio *folio, bool need_uptodate)
  {
-@@ -2606,6 +2607,24 @@ static int filemap_update_page(struct kiocb *iocb,
+@@ -2545,6 +2546,24 @@ static int filemap_update_page(struct kiocb *iocb,
  	return error;
  }
  
@@ -888,7 +1006,7 @@ index 5af62e6abc..70b483be03 100644
 +	int error;
 +
 +	if (waits)
-+		lru_cast_wait_begin(LRU_CAST_FILE, lru_cast_refaulted(folio));
++		lru_cast_wait_begin_file(lru_cast_refaulted(folio), mapping);
 +	error = __filemap_update_page(iocb, mapping, count, folio, need_uptodate);
 +	/* not a wait: to be tried again, or waited for by no task */
 +	if (waits)
@@ -899,7 +1017,7 @@ index 5af62e6abc..70b483be03 100644
  static int filemap_create_folio(struct kiocb *iocb, struct folio_batch *fbatch)
  {
  	struct address_space *mapping = iocb->ki_filp->f_mapping;
-@@ -3548,6 +3567,8 @@ vm_fault_t filemap_fault(struct vm_fault *vmf)
+@@ -3460,6 +3479,8 @@ vm_fault_t filemap_fault(struct vm_fault *vmf)
  	struct folio *folio;
  	vm_fault_t ret = 0;
  	bool mapping_locked = false;
@@ -908,25 +1026,25 @@ index 5af62e6abc..70b483be03 100644
  
  	max_idx = DIV_ROUND_UP(i_size_read(inode), PAGE_SIZE);
  	if (unlikely(index >= max_idx))
-@@ -3569,6 +3590,8 @@ vm_fault_t filemap_fault(struct vm_fault *vmf)
+@@ -3481,6 +3502,8 @@ vm_fault_t filemap_fault(struct vm_fault *vmf)
  		if (unlikely(!folio_test_uptodate(folio))) {
  			filemap_invalidate_lock_shared(mapping);
  			mapping_locked = true;
 +			waits = true;
-+			lru_cast_wait_begin(LRU_CAST_FILE, lru_cast_refaulted(folio));
++			lru_cast_wait_begin_file(lru_cast_refaulted(folio), mapping);
  		}
  	} else {
  		ret = filemap_fault_recheck_pte_none(vmf);
-@@ -3579,6 +3602,8 @@ vm_fault_t filemap_fault(struct vm_fault *vmf)
+@@ -3491,6 +3514,8 @@ vm_fault_t filemap_fault(struct vm_fault *vmf)
  		count_vm_event(PGMAJFAULT);
  		count_memcg_event_mm(vmf->vma->vm_mm, PGMAJFAULT);
  		ret = VM_FAULT_MAJOR;
 +		waits = true;
-+		lru_cast_wait_begin(LRU_CAST_FILE, false);	/* its refault told once in */
++		lru_cast_wait_begin_file(false, mapping);	/* its refault told once in */
  		fpin = do_sync_mmap_readahead(vmf);
  retry_find:
  		/*
-@@ -3660,6 +3685,8 @@ vm_fault_t filemap_fault(struct vm_fault *vmf)
+@@ -3572,6 +3597,8 @@ vm_fault_t filemap_fault(struct vm_fault *vmf)
  		return VM_FAULT_SIGBUS;
  	}
  
@@ -935,7 +1053,7 @@ index 5af62e6abc..70b483be03 100644
  	vmf->page = folio_file_page(folio, index);
  	return ret | VM_FAULT_LOCKED;
  
-@@ -3688,8 +3715,11 @@ vm_fault_t filemap_fault(struct vm_fault *vmf)
+@@ -3600,8 +3627,11 @@ vm_fault_t filemap_fault(struct vm_fault *vmf)
  	 * re-find the vma and come back and find our hopefully still populated
  	 * page.
  	 */
@@ -949,18 +1067,18 @@ index 5af62e6abc..70b483be03 100644
  		filemap_invalidate_unlock_shared(mapping);
  	if (fpin)
 diff --git a/mm/huge_memory.c b/mm/huge_memory.c
-index 2bccb0a53a..9341f1e2d5 100644
+index 8218e9d188..8b8c2236f4 100644
 --- a/mm/huge_memory.c
 +++ b/mm/huge_memory.c
-@@ -17,6 +17,7 @@
- #include <linux/list_lru.h>
+@@ -16,6 +16,7 @@
+ #include <linux/swap.h>
  #include <linux/shrinker.h>
  #include <linux/mm_inline.h>
 +#include <linux/lru_cast.h>
  #include <linux/swapops.h>
  #include <linux/backing-dev.h>
  #include <linux/dax.h>
-@@ -3596,6 +3597,8 @@ static void __split_folio_to_order(struct folio *folio, int old_order,
+@@ -3360,6 +3361,8 @@ static void __split_folio_to_order(struct folio *folio, int old_order,
  
  		if (folio_test_swapcache(folio))
  			new_folio->swap.val = folio->swap.val + i;
@@ -970,10 +1088,10 @@ index 2bccb0a53a..9341f1e2d5 100644
  		/* Page flags must be visible before we make the page non-compound. */
  		smp_wmb();
 diff --git a/mm/khugepaged.c b/mm/khugepaged.c
-index 617bca76db..b823c87e88 100644
+index abe54f0043..950f212167 100644
 --- a/mm/khugepaged.c
 +++ b/mm/khugepaged.c
-@@ -1199,6 +1199,8 @@ static enum scan_result __collapse_huge_page_swapin(struct mm_struct *mm,
+@@ -1023,6 +1023,8 @@ static int __collapse_huge_page_swapin(struct mm_struct *mm,
  		vmf.pte = pte;
  		vmf.ptl = ptl;
  		ret = do_swap_page(&vmf);
@@ -1748,10 +1866,10 @@ index 0000000000..6e22ab2993
 +}
 diff --git a/mm/lru_cast/core/core.h b/mm/lru_cast/core/core.h
 new file mode 100644
-index 0000000000..2d3d730ded
+index 0000000000..d924d35f70
 --- /dev/null
 +++ b/mm/lru_cast/core/core.h
-@@ -0,0 +1,92 @@
+@@ -0,0 +1,100 @@
 +/* SPDX-License-Identifier: GPL-2.0 */
 +/*
 + * CAST -- the core: what a folio's reads were, and when.
@@ -1830,6 +1948,14 @@ index 0000000000..2d3d730ded
 +}
 +
 +/* key.c */
++/*
++ * The weakest decay, H = 128 C: never none. With none a key is the read
++ * count alone, with nothing of when: folios read 255 times or more tie,
++ * and a set read often once stays however long it is not. At le 1 a
++ * folio's reads still count for 8 half-lives of recency at most (log2 255),
++ * and among those read that often the last read decides.
++ */
++#define LRU_CAST_LE_MIN	1
 +#define LRU_CAST_LE_MAX	14			/* the steepest decay */
 +long lru_cast_key(u32 w, unsigned long tick, int le);
 +long lru_cast_key_res(u32 w, unsigned long tick, int le, int res);
@@ -1846,16 +1972,17 @@ index 0000000000..2d3d730ded
 +#endif /* _MM_LRU_CAST_CORE_H */
 diff --git a/mm/lru_cast/core/key.c b/mm/lru_cast/core/key.c
 new file mode 100644
-index 0000000000..0e9ec32745
+index 0000000000..a4a2778050
 --- /dev/null
 +++ b/mm/lru_cast/core/key.c
-@@ -0,0 +1,166 @@
+@@ -0,0 +1,167 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * CAST -- the key of a state word.
 + *
 + * The score of a folio is its read count decayed with a half-life of H
-+ * pages taken in (core/clock.c), H = C * 2^(8 - le) (le = 0: no decay):
++ * pages taken in (core/clock.c), H = C * 2^(8 - le), le from LRU_CAST_LE_MIN
++ * (H = 128 C) to LRU_CAST_LE_MAX:
 + *
 + *   s = sum_j 2^-(age_j / H) + max(n - 3, 0) * 2^-(age_oldest / H)
 + *
@@ -1872,8 +1999,9 @@ index 0000000000..0e9ec32745
 + * 2^-res half-lives: the main cache's sweep (policy/ring.c) in sixteenths,
 + * the controllers' simulated caches (tune/) in quarters, in a ring of
 + * LRU_CAST_BUCKETS of them anchored at now: [top - 255, top], top = 4 E/H
-+ * + 32 (a folio read just now has log2 s < 8). With no decay the key is
-+ * the read count.
++ * + 32 (a folio read just now has log2 s < 8). With no decay (le = 0,
++ * which the policy no longer runs at: core/core.h) the key is the read
++ * count.
 + *
 + * Pure arithmetic on a state word and a clock.
 + */
@@ -2015,7 +2143,6 @@ index 0000000000..0e9ec32745
 +		return 0;
 +	return (long)((((tick * lru_cast_dq(le)) >> 8) + 8 * 256) >> 6) - (LRU_CAST_BUCKETS - 1);
 +}
-+
 diff --git a/mm/lru_cast/core/prefetch.c b/mm/lru_cast/core/prefetch.c
 new file mode 100644
 index 0000000000..1f7064ac8f
@@ -2166,10 +2293,10 @@ index 0000000000..a3c067a782
 +#endif /* _MM_LRU_CAST_CORE_PREFETCH_H */
 diff --git a/mm/lru_cast/core/state.c b/mm/lru_cast/core/state.c
 new file mode 100644
-index 0000000000..590876a75f
+index 0000000000..6ce5526384
 --- /dev/null
 +++ b/mm/lru_cast/core/state.c
-@@ -0,0 +1,241 @@
+@@ -0,0 +1,240 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * CAST -- the per-folio state word.
@@ -2410,7 +2537,6 @@ index 0000000000..590876a75f
 +	if (w)
 +		lru_cast_installed(dst, folio_nr_pages(dst));
 +}
-+
 diff --git a/mm/lru_cast/core/store.c b/mm/lru_cast/core/store.c
 new file mode 100644
 index 0000000000..079687b98f
@@ -2681,10 +2807,10 @@ index 0000000000..3393f1e192
 +}
 diff --git a/mm/lru_cast/policy/balance.c b/mm/lru_cast/policy/balance.c
 new file mode 100644
-index 0000000000..aa161c8a08
+index 0000000000..b9eeddd739
 --- /dev/null
 +++ b/mm/lru_cast/policy/balance.c
-@@ -0,0 +1,201 @@
+@@ -0,0 +1,240 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * CAST -- which type to take from, and the clean-file floor.
@@ -2701,9 +2827,12 @@ index 0000000000..aa161c8a08
 + * administrator sets is: at the share the two are pressed alike, the
 + * further over it the harder, and never is a type left alone. A type that
 + * will not give, its pages in use, keeps them, and the other gives in its
-+ * place. Before the curves can compare, the share is the split memory had
-+ * when reclaim first chose, so that each type pays for its own. On the
-+ * last pass before OOM (priority 0) it takes from both by their sizes.
++ * place. Anon's part of memory counts what it holds compressed in memory,
++ * in zram or zswap, as well as its pages on the lists: a page swapped to
++ * zram frees only what compressing it saves. Before the curves can
++ * compare, the share is the split memory had when reclaim first chose, so
++ * that each type pays for its own. On the last pass before OOM (priority
++ * 0) it takes from both by their sizes.
 + *
 + * Three values of swappiness are promises, kept outside the measure:
 + *
@@ -2747,6 +2876,25 @@ index 0000000000..aa161c8a08
 +
 +/* node passes the floor held for */
 +static atomic_long_t lru_cast_floor_held;
++
++/*
++ * The pages zsmalloc holds on @pgdat (all nodes, with NULL): anon swapped
++ * to zram or zswap, still in memory, compressed. It is anon's memory as
++ * much as the anon on the lists is.
++ */
++static unsigned long lru_cast_zspages(struct pglist_data *pgdat)
++{
++	unsigned long n = 0;
++#if IS_ENABLED(CONFIG_ZSMALLOC)
++	int z;
++
++	if (!pgdat)
++		return global_zone_page_state(NR_ZSPAGES);
++	for (z = 0; z < MAX_NR_ZONES; z++)
++		n += zone_page_state(&pgdat->node_zones[z], NR_ZSPAGES);
++#endif
++	return n;
++}
 +
 +static bool lru_cast_has_anon(struct pglist_data *pgdat)
 +{
@@ -2798,7 +2946,7 @@ index 0000000000..aa161c8a08
 +static noinline void lru_cast_hold_share(void)
 +{
 +	unsigned long anon = global_node_page_state(NR_INACTIVE_ANON) +
-+			     global_node_page_state(NR_ACTIVE_ANON);
++			     global_node_page_state(NR_ACTIVE_ANON) + lru_cast_zspages(NULL);
 +	unsigned long file = global_node_page_state(NR_INACTIVE_FILE) +
 +			     global_node_page_state(NR_ACTIVE_FILE);
 +
@@ -2807,8 +2955,25 @@ index 0000000000..aa161c8a08
 +}
 +
 +/*
++ * @lruvec's part of its node's compressed anon (@anon on its lists): by its
++ * part of the node's anon -- zram charges no cgroup for what it holds
++ */
++static unsigned long lru_cast_zs_part(struct lruvec *lruvec, unsigned long anon)
++{
++	struct pglist_data *pgdat = lruvec_pgdat(lruvec);
++	unsigned long zs = lru_cast_zspages(pgdat);
++	unsigned long node = node_page_state(pgdat, NR_ACTIVE_ANON) +
++			     node_page_state(pgdat, NR_INACTIVE_ANON);
++
++	if (!zs || !node)
++		return 0;
++	return div64_u64((u64)zs * min(anon, node), node);
++}
++
++/*
 + * The pressure on a page of each type, as a swappiness: each type's part of
-+ * memory over its share, anon's against file's, no further apart than 1:199
++ * memory over its share, anon's against file's, no further apart than 1:199.
++ * Anon's memory is its pages on the lists and those compressed in memory.
 + */
 +static void lru_cast_pressure(unsigned long anon, unsigned long file, u64 *weight)
 +{
@@ -2845,7 +3010,7 @@ index 0000000000..aa161c8a08
 +		else {	/* both, pressed toward the share */
 +			if (unlikely(!lru_cast_param_share_held()))
 +				lru_cast_hold_share();
-+			lru_cast_pressure(anon, file, weight);
++			lru_cast_pressure(anon + lru_cast_zs_part(lruvec, anon), file, weight);
 +			pick = LRU_CAST_BOTH;
 +		}
 +	} else if (anon_ok) {
@@ -3053,10 +3218,10 @@ index 0000000000..638293bc76
 +}
 diff --git a/mm/lru_cast/policy/params.c b/mm/lru_cast/policy/params.c
 new file mode 100644
-index 0000000000..90fc0f0f19
+index 0000000000..d032ff4630
 --- /dev/null
 +++ b/mm/lru_cast/policy/params.c
-@@ -0,0 +1,69 @@
+@@ -0,0 +1,70 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * CAST -- the main cache's operating point.
@@ -3073,20 +3238,21 @@ index 0000000000..90fc0f0f19
 +#include "policy/policy.h"
 +
 +/*
-+ * The decay starts at none. A decay too weak costs misses as long as it
-+ * lasts -- folios read often once and no more stay -- and the controllers
-+ * see them pile up; one too strong costs only after a scan, a few, the
++ * The decay starts at its weakest (core/core.h). A decay too weak costs
++ * misses as long as it lasts -- folios read often once and no more stay --
++ * and the controllers see them pile up; one too strong costs only after a scan, a few, the
 + * folios read often until it began: too few, in the sample, to move the
 + * decay back down before the next.
 + */
 +struct lru_cast_params lru_cast_params = {
-+	.le = { 0, 0 },
++	.le = { LRU_CAST_LE_MIN, LRU_CAST_LE_MIN },
 +	.share = 500,
 +};
 +
 +void lru_cast_param_set_le(int type, unsigned int le)
 +{
-+	WRITE_ONCE(lru_cast_params.le[type], min(le, (unsigned int)LRU_CAST_LE_MAX));
++	WRITE_ONCE(lru_cast_params.le[type], clamp(le, (unsigned int)LRU_CAST_LE_MIN,
++						   (unsigned int)LRU_CAST_LE_MAX));
 +}
 +
 +void lru_cast_param_set_w(int type, unsigned int permille)
@@ -3402,10 +3568,10 @@ index 0000000000..22e9c49620
 +}
 diff --git a/mm/lru_cast/policy/ring.c b/mm/lru_cast/policy/ring.c
 new file mode 100644
-index 0000000000..9849fe16ac
+index 0000000000..6dfb642d42
 --- /dev/null
 +++ b/mm/lru_cast/policy/ring.c
-@@ -0,0 +1,724 @@
+@@ -0,0 +1,760 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * CAST -- keys, and M's lowest found by a sweep.
@@ -3463,6 +3629,7 @@ index 0000000000..9849fe16ac
 + *
 + * Everything here runs under the lruvec's lru_lock but the work.
 + */
++#include <linux/hash.h>
 +#include <linux/sort.h>
 +#include <linux/xarray.h>
 +#include <linux/workqueue.h>
@@ -3713,6 +3880,28 @@ index 0000000000..9849fe16ac
 +	return lru_cast_key_res(lru_cast_read(folio), tick, le, LRU_CAST_RES);
 +}
 +
++/*
++ * A key ranked among its equals. Folios with one key -- read
++ * in the same ticks, the same number of times -- are taken in the order a
++ * sweep meets them, a cursor's over PFNs: a clock, a folio read again
++ * since it was found skipped. Of folios read more than once that is a loop's
++ * order, and a loop over more than M is served best by keeping the same
++ * part of itself: those are ranked by a hash of the PFN, the same of them
++ * going first each time. A folio read once keeps the clock's order. The
++ * rank is the key times 2^16, plus the hash; the key is the rank >> 16.
++ */
++static long lru_cast_rank(long key, unsigned long pfn, u32 w)
++{
++	if (key == LONG_MIN)
++		return LONG_MIN;
++	return key * 65536 + ((w >> 24) >= 2 ? hash_long(pfn, 16) : 0);
++}
++
++static long lru_cast_unrank(long rank)
++{
++	return rank == LONG_MIN ? LONG_MIN : rank >> 16;
++}
++
 +static void lru_cast_flush(struct lru_cast *k)
 +{
 +	k->ncand = k->pos = 0;
@@ -3755,12 +3944,25 @@ index 0000000000..9849fe16ac
 +{
 +	struct lru_cast *k = &lruvec->lru_cast[type];
 +	long b = lru_cast_key_now(folio, lru_cast_tick(lruvec_pgdat(lruvec), type), k->ring_le);
++	u32 w = lru_cast_read(folio);
++	/*
++	 * Read more than once, it is ranked as M's are; read once, by its key
++	 * alone: of one key, the newcomer is the one read last.
++	 */
++	bool ranked = (w >> 24) >= 2;
++	long r = lru_cast_rank(b, folio_pfn(folio), w), x = ranked ? r : b;
 +	struct lru_cast_cand *c;
 +
 +	list_add(&folio->lru, lru_cast_m(lruvec, type));
 +	lru_cast_m_enter(lruvec, folio, type);
-+	if (k->pos < k->ncand ? b >= k->cand[k->pos].key : !k->tau_ok || b > k->tau)
++	if (k->pos < k->ncand) {
++		long lo = k->cand[k->pos].key;
++
++		if (x >= (ranked ? lo : lru_cast_unrank(lo)))
++			return;
++	} else if (!k->tau_ok || x > (ranked ? k->tau : lru_cast_unrank(k->tau))) {
 +		return;
++	}
 +	if (k->pos == k->ncand)
 +		k->pos = k->ncand = 0;
 +	if (k->pos) {
@@ -3772,8 +3974,8 @@ index 0000000000..9849fe16ac
 +	}
 +	c = &k->cand[k->pos];
 +	c->pfn = folio_pfn(folio);
-+	c->key = b;
-+	c->word = lru_cast_read(folio);
++	c->key = r;
++	c->word = w;
 +	sw_add(SW_GATE, 1);
 +}
 +
@@ -3873,7 +4075,7 @@ index 0000000000..9849fe16ac
 +			continue;
 +		if (lru_cast_spilled(owner) && !lru_cast_spill_ours(pfn, lruvec, type))
 +			continue;
-+		k->sample[n++] = lru_cast_key_res(w, tick, le, LRU_CAST_RES);
++		k->sample[n++] = lru_cast_rank(lru_cast_key_res(w, tick, le, LRU_CAST_RES), pfn, w);
 +	}
 +	k->seen = 0;
 +	if (n < LRU_CAST_PROBE_MIN)
@@ -3958,7 +4160,7 @@ index 0000000000..9849fe16ac
 +		if (!(w >> 24))
 +			continue;
 +		words++;
-+		key = lru_cast_key_res(w, tick, le, LRU_CAST_RES);
++		key = lru_cast_rank(lru_cast_key_res(w, tick, le, LRU_CAST_RES), pfn, w);
 +		/* a reservoir sample of the pass's keys */
 +		if (k->seen < LRU_CAST_SAMPLES) {
 +			k->sample[k->seen] = key;
@@ -4032,7 +4234,7 @@ index 0000000000..9849fe16ac
 +			lru_cast_cand_ahead(k, k->pos - 1, false);
 +			folio = lru_cast_cand_folio(lruvec, type, c);
 +			if (folio) {
-+				*bucket = c->key;
++				*bucket = lru_cast_unrank(c->key);
 +				sw_add(SW_TAKEN, 1);
 +				return folio;
 +			}
@@ -4132,7 +4334,7 @@ index 0000000000..9849fe16ac
 +}
 diff --git a/mm/lru_cast/sysfs.c b/mm/lru_cast/sysfs.c
 new file mode 100644
-index 0000000000..f94abdb4cc
+index 0000000000..42d05034b6
 --- /dev/null
 +++ b/mm/lru_cast/sysfs.c
 @@ -0,0 +1,293 @@
@@ -4142,8 +4344,8 @@ index 0000000000..f94abdb4cc
 + *
 + *   version      the release
 + *   enabled      1 / 0: switch CAST on or off at run time (not if booted off)
-+ *   decay        le per type, 0..14: half-life C * 2^(8 - le) pages taken in; 0 = no
-+ *                decay. Writing one sets both and stops decay_auto
++ *   decay        le per type, 1..14: half-life C * 2^(8 - le) pages taken in.
++ *                Writing one sets both and stops decay_auto
 + *   decay_auto   1 / 0: the controllers (tune/) set the decay and W's share
 + *   tune         the controllers: per type the decay and W's share, and per
 + *                simulated cache the misses and disagreements they decide on
@@ -4209,7 +4411,7 @@ index 0000000000..f94abdb4cc
 +{
 +	unsigned int v;
 +
-+	if (kstrtouint(buf, 0, &v) || v > LRU_CAST_LE_MAX)
++	if (kstrtouint(buf, 0, &v) || v < LRU_CAST_LE_MIN || v > LRU_CAST_LE_MAX)
 +		return -EINVAL;
 +	lru_cast_tune_set_auto(false);
 +	lru_cast_param_set_le(0, v);
@@ -4431,10 +4633,10 @@ index 0000000000..f94abdb4cc
 +}
 diff --git a/mm/lru_cast/tune/cost.c b/mm/lru_cast/tune/cost.c
 new file mode 100644
-index 0000000000..e92d6d46a5
+index 0000000000..274a96200e
 --- /dev/null
 +++ b/mm/lru_cast/tune/cost.c
-@@ -0,0 +1,245 @@
+@@ -0,0 +1,504 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * CAST -- what a refault costs, per type: how long a task waited,
@@ -4468,22 +4670,28 @@ index 0000000000..e92d6d46a5
 + * A wait is timed as the device's part of it, not as the time from asking
 + * to having: while others wait too, a page comes in behind the ones asked
 + * before it, and the time it spent queued behind them is theirs. So, as
-+ * ADIOS's latency model does, the waits of a type in flight together are a
-+ * burst: each is the time from the end before it to its own, and the first
-+ * to end, with no end before it, is timed from the burst's start, when the
-+ * first of it began. The times add up to the burst's, from its start to its
-+ * last end, however its waits interleave. The clock is read not at each:
-+ * at a burst's start, at its last end, and every LRU_CAST_WAIT_BATCH ends
-+ * between, the ends since the last reading sharing the time alike. A wait is in flight from where
-+ * the task is known to wait for a page not in -- a swap-in, or a file page
-+ * not yet read -- to where the call that waited returns; every wait counts
-+ * to the bursts, those for a page back from an eviction are also the
-+ * samples. What the device has queued that no task waits for -- readahead,
-+ * writeback -- CAST cannot see.
++ * ADIOS's latency model does, the waits in flight together on one queue are
++ * a burst: each is the time from the end before it to its own, and the
++ * first to end, with no end before it, is timed from the burst's start,
++ * when the first of it began. The times add up to the burst's, from its
++ * start to its last end, however its waits interleave. The clock is read
++ * not at each: at a burst's start, at its last end, and every
++ * LRU_CAST_WAIT_BATCH ends between, the ends since the last reading sharing
++ * the time alike. A wait is in flight from where the task is known to wait
++ * for a page not in -- a swap-in, or a file page not yet read -- to where
++ * the call that waited returns. The queue is what does the work: a device,
++ * one per type, for what is read from a disk; the CPU the task is on, for
++ * what the task works off itself -- a swap-in from zram decompressed by the
++ * task, which other CPUs decompressing at the same time do not make any
++ * quicker. A task that sleeps in such a wait and wakes on another CPU ends
++ * it on the CPU it began on; every wait counts to the bursts, those for a
++ * page back from an eviction are also the samples. What the device has
++ * queued that no task waits for -- readahead, writeback -- CAST cannot see.
 + *
 + * Waits and their number are counted per CPU, where they happen, and
 + * gathered at each evaluation.
 + */
++#include <linux/backing-dev.h>
 +#include <linux/swap.h>
 +#include "tune/tune.h"
 +#include "tune/cost.h"
@@ -4491,69 +4699,273 @@ index 0000000000..e92d6d46a5
 +
 +static DEFINE_PER_CPU(u64, lru_cast_tune_wait[ANON_AND_FILE]);	/* ns */
 +static DEFINE_PER_CPU(u64, lru_cast_tune_refaults[ANON_AND_FILE]);
++/* anon's swap-outs: ns, pages */
++static DEFINE_PER_CPU(u64, lru_cast_tune_evict_ns);
++static DEFINE_PER_CPU(u64, lru_cast_tune_evicts);
 +#define LRU_CAST_WAIT_BATCH	16	/* ends timed at one reading of the clock, about */
 +
 +/*
-+ * Per type: the waits in flight; those ended and not yet timed, all of them
-+ * (low half) and the refaults (high half); when the clock was last read.
++ * A queue waits form on: the waits in flight; those ended and not yet
++ * timed, packed in four fields of 16 bits -- all of them, anon's refaults,
++ * file's, and anon's pages written out (LRU_CAST_WAIT_EVICT); when the
++ * clock was last read. A swap-out to a device queues there as a read does.
 + */
-+static atomic_t lru_cast_tune_inflight[ANON_AND_FILE];
-+static atomic64_t lru_cast_tune_ended[ANON_AND_FILE], lru_cast_tune_mark[ANON_AND_FILE];
++struct lru_cast_wait_q {
++	atomic_t inflight;
++	atomic64_t ended, mark;
++};
++
++#define LRU_CAST_WAIT_BITS	16
++#define LRU_CAST_WAIT_MASK	((1ULL << LRU_CAST_WAIT_BITS) - 1)
++#define LRU_CAST_WAIT_EVICT	3	/* the field of anon's pages written out */
++#define LRU_CAST_WAIT_ONE(f)	(1ULL << (LRU_CAST_WAIT_BITS * (f)))
++
++/* what a queue's refaults cost, and anon's swap-outs: ns and number */
++struct lru_cast_wait_stat {
++	atomic64_t ns[ANON_AND_FILE], n[ANON_AND_FILE];
++	atomic64_t evict_ns, evict_n;
++};
++
++/*
++ * A device, by the id of its backing_dev_info: its queue, shared by
++ * whatever is read from it, swap and file alike. The last is all the
++ * devices the table has no room for, and those of no id.
++ */
++#define LRU_CAST_WAIT_DEVS	16
++
++struct lru_cast_wait_dev {
++	u64 id;
++	struct lru_cast_wait_q q;
++	struct lru_cast_wait_stat stat;
++};
++
++static struct lru_cast_wait_dev lru_cast_wait_devs[LRU_CAST_WAIT_DEVS + 1];
++/* the CPUs, each its own queue; what their waits cost, together */
++static DEFINE_PER_CPU(struct lru_cast_wait_q, lru_cast_wait_cpu_q);
++static struct lru_cast_wait_stat lru_cast_wait_cpu_stat;
 +
 +static DEFINE_SPINLOCK(lru_cast_tune_cost_lock);
 +/* forgetting */
 +static u64 lru_cast_tune_sum[ANON_AND_FILE], lru_cast_tune_n[ANON_AND_FILE];
 +/* gathered so far */
 +static u64 lru_cast_tune_last_wait[ANON_AND_FILE], lru_cast_tune_last_n[ANON_AND_FILE];
++/* anon's swap-outs, forgetting with the refaults; gathered so far */
++static u64 lru_cast_tune_esum, lru_cast_tune_en, lru_cast_tune_last_esum, lru_cast_tune_last_en;
 +
 +/*
-+ * The clock read at @now: the waits ended since it was last read share the
-+ * time between, each alike; the refaults' part is their wait. Two readings
-+ * at once may pair a time with the other's ends; both add up all the same.
++ * The clock read at @now: the waits ended on @q since it was last read share
++ * the time between, each alike; the refaults' part is their wait. Two
++ * readings at once may pair a time with the other's ends; both add up all
++ * the same.
 + */
-+static void lru_cast_wait_time(int type, u64 now)
++static void lru_cast_wait_time(struct lru_cast_wait_q *q, struct lru_cast_wait_stat *stat,
++			       u64 now)
 +{
-+	u64 mark = atomic64_xchg(&lru_cast_tune_mark[type], now);
-+	u64 ended = atomic64_xchg(&lru_cast_tune_ended[type], 0);
-+	u64 n = (u32)ended, r = ended >> 32;
-+
-+	if (!r)
-+		return;
++	u64 mark = atomic64_xchg(&q->mark, now);
++	u64 ended = atomic64_xchg(&q->ended, 0);
++	u64 n = ended & LRU_CAST_WAIT_MASK;
++	u64 w = (ended >> (LRU_CAST_WAIT_BITS * LRU_CAST_WAIT_EVICT)) & LRU_CAST_WAIT_MASK;
 +	/* now behind mark: read before another's reading, swapped in after it */
-+	this_cpu_add(lru_cast_tune_wait[type],
-+		     (s64)(now - mark) > 0 ? div64_u64((now - mark) * r, n) : 0);
-+	this_cpu_add(lru_cast_tune_refaults[type], r);
++	u64 dt = (s64)(now - mark) > 0 ? now - mark : 0;
++	int type;
++
++	for (type = 0; type < ANON_AND_FILE; type++) {
++		u64 r = (ended >> (LRU_CAST_WAIT_BITS * (type + 1))) & LRU_CAST_WAIT_MASK;
++		u64 part;
++
++		if (!r)
++			continue;
++		part = div64_u64(dt * r, n);
++		this_cpu_add(lru_cast_tune_wait[type], part);
++		this_cpu_add(lru_cast_tune_refaults[type], r);
++		atomic64_add(part, &stat->ns[type]);
++		atomic64_add(r, &stat->n[type]);
++	}
++	if (w) {
++		u64 part = div64_u64(dt * w, n);
++
++		this_cpu_add(lru_cast_tune_evict_ns, part);
++		this_cpu_add(lru_cast_tune_evicts, w);
++		atomic64_add(part, &stat->evict_ns);
++		atomic64_add(w, &stat->evict_n);
++	}
 +}
 +
-+void __lru_cast_wait_begin(int type, bool refault)
++/* the table's place of device @id, taken if it has none yet */
++static int lru_cast_wait_dev_slot(u64 id)
++{
++	int i;
++
++	if (!id)
++		return LRU_CAST_WAIT_DEVS;
++	for (i = 0; i < LRU_CAST_WAIT_DEVS; i++) {
++		u64 cur = READ_ONCE(lru_cast_wait_devs[i].id);
++
++		if (cur == id)
++			return i;
++		if (!cur) {
++			cur = cmpxchg64(&lru_cast_wait_devs[i].id, 0, id);
++			if (!cur || cur == id)
++				return i;
++		}
++	}
++	return LRU_CAST_WAIT_DEVS;
++}
++
++/* the queue the task's wait is on, and where its costs go */
++static struct lru_cast_wait_q *lru_cast_wait_q(u8 wait, struct lru_cast_wait_stat **stat)
++{
++	u16 where = current->lru_cast_wait_where;
++
++	if (wait & LRU_CAST_WAIT_CPU) {
++		*stat = &lru_cast_wait_cpu_stat;
++		return per_cpu_ptr(&lru_cast_wait_cpu_q, where);
++	}
++	*stat = &lru_cast_wait_devs[where].stat;
++	return &lru_cast_wait_devs[where].q;
++}
++
++/* one more in flight on @q: the first of a burst reads the clock at its start */
++static void lru_cast_q_join(struct lru_cast_wait_q *q, struct lru_cast_wait_stat *stat)
++{
++	if (atomic_inc_return(&q->inflight) == 1)
++		lru_cast_wait_time(q, stat, ktime_get_ns());
++}
++
++/* one fewer, @inc added to its ends: the last of a burst, or the end that makes a batch */
++static void lru_cast_q_leave(struct lru_cast_wait_q *q, struct lru_cast_wait_stat *stat,
++			     u64 inc)
++{
++	u64 ended = inc ? atomic64_add_return(inc, &q->ended) : 0;
++	u64 now = ended & LRU_CAST_WAIT_MASK, was = (ended - inc) & LRU_CAST_WAIT_MASK;
++
++	/* the ends after the batch's, before the reading takes the count, go with it */
++	if (atomic_dec_if_positive(&q->inflight) <= 0 ||
++	    (was < LRU_CAST_WAIT_BATCH && now >= LRU_CAST_WAIT_BATCH))
++		lru_cast_wait_time(q, stat, ktime_get_ns());
++}
++
++static void lru_cast_wait_join(void)
++{
++	struct lru_cast_wait_stat *stat;
++	struct lru_cast_wait_q *q = lru_cast_wait_q(current->lru_cast_wait, &stat);
++
++	lru_cast_q_join(q, stat);
++}
++
++static void lru_cast_wait_leave(u8 wait, u64 inc)
++{
++	struct lru_cast_wait_stat *stat;
++	struct lru_cast_wait_q *q = lru_cast_wait_q(wait, &stat);
++
++	lru_cast_q_leave(q, stat, inc);
++}
++
++void __lru_cast_wait_begin(int type, bool refault, u64 dev)
 +{
 +	/* one begun and never ended -- CAST switched off before it ended */
 +	if (unlikely(current->lru_cast_wait))
 +		__lru_cast_wait_end(false);
 +	current->lru_cast_wait = (type + 1) | (refault ? LRU_CAST_WAIT_REFAULT : 0);
-+	/* the first of a burst: the clock read at its start */
-+	if (atomic_inc_return(&lru_cast_tune_inflight[type]) == 1)
-+		lru_cast_wait_time(type, ktime_get_ns());
++	if (dev == LRU_CAST_DEV_CPU) {
++		/* the CPU it began on, which the task may leave if it sleeps */
++		current->lru_cast_wait |= LRU_CAST_WAIT_CPU;
++		current->lru_cast_wait_where = raw_smp_processor_id();
++	} else {
++		current->lru_cast_wait_where = lru_cast_wait_dev_slot(dev);
++	}
++	lru_cast_wait_join();
++}
++
++void __lru_cast_wait_begin_file(bool refault, struct address_space *mapping)
++{
++	__lru_cast_wait_begin(LRU_CAST_FILE, refault, inode_to_bdi(mapping->host)->id);
++}
++
++/* the swap-in begun on the CPU is read from device @dev: it queues there */
++void __lru_cast_wait_queued(u64 dev)
++{
++	lru_cast_wait_leave(current->lru_cast_wait, 0);
++	current->lru_cast_wait &= ~LRU_CAST_WAIT_CPU;
++	current->lru_cast_wait_where = lru_cast_wait_dev_slot(dev);
++	lru_cast_wait_join();
 +}
 +
 +/* the task's wait ended: with the page in (@done), or given up */
 +void __lru_cast_wait_end(bool done)
 +{
 +	u8 wait = current->lru_cast_wait;
-+	int type = (wait & ~LRU_CAST_WAIT_REFAULT) - 1;
-+	u64 ended = 0;
++	int type = (wait & LRU_CAST_WAIT_TYPE) - 1;
++	u64 inc = 0;
 +
++	current->lru_cast_wait_swap = 0;
++	if (!wait)
++		return;
 +	current->lru_cast_wait = 0;
 +	if (done)
-+		ended = atomic64_add_return(1 | (u64)!!(wait & LRU_CAST_WAIT_REFAULT) << 32,
-+					    &lru_cast_tune_ended[type]);
-+	/*
-+	 * The last of a burst, or the end that makes a batch: the clock read.
-+	 * The ends after it, before the reading takes the count, go with it.
-+	 */
-+	if (atomic_dec_if_positive(&lru_cast_tune_inflight[type]) <= 0 ||
-+	    (u32)ended == LRU_CAST_WAIT_BATCH)
-+		lru_cast_wait_time(type, ktime_get_ns());
++		inc = 1 | (wait & LRU_CAST_WAIT_REFAULT ? LRU_CAST_WAIT_ONE(type + 1) : 0);
++	lru_cast_wait_leave(wait, inc);
++}
++
++/*
++ * Swap-outs: what writing out a page of anon costs. Done by the CPU -- a
++ * zero-filled page, zswap's compression, a synchronous device's (zram's)
++ * -- it is the time taken there, from @t0; written to a device, the
++ * write queues on it with the reads, from submission to completion.
++ */
++void __lru_cast_evict_cpu(u64 t0, unsigned long nr)
++{
++	u64 ns = ktime_get_ns() - t0;
++
++	this_cpu_add(lru_cast_tune_evict_ns, ns);
++	this_cpu_add(lru_cast_tune_evicts, nr);
++	atomic64_add(ns, &lru_cast_wait_cpu_stat.evict_ns);
++	atomic64_add(nr, &lru_cast_wait_cpu_stat.evict_n);
++}
++
++void __lru_cast_evict_io_begin(u64 dev)
++{
++	struct lru_cast_wait_dev *d = &lru_cast_wait_devs[lru_cast_wait_dev_slot(dev)];
++
++	lru_cast_q_join(&d->q, &d->stat);
++}
++
++void __lru_cast_evict_io_end(u64 dev, unsigned long nr)
++{
++	struct lru_cast_wait_dev *d = &lru_cast_wait_devs[lru_cast_wait_dev_slot(dev)];
++
++	lru_cast_q_leave(&d->q, &d->stat, nr | nr * LRU_CAST_WAIT_ONE(LRU_CAST_WAIT_EVICT));
++}
++
++/* the waits in flight on every queue */
++static int lru_cast_wait_inflight(void)
++{
++	int i, cpu, n = 0;
++
++	for (i = 0; i <= LRU_CAST_WAIT_DEVS; i++)
++		n += atomic_read(&lru_cast_wait_devs[i].q.inflight);
++	for_each_possible_cpu(cpu)
++		n += atomic_read(&per_cpu_ptr(&lru_cast_wait_cpu_q, cpu)->inflight);
++	return n;
++}
++
++static int lru_cast_wait_stat_show(char *buf, int len, const char *what,
++				   struct lru_cast_wait_stat *stat)
++{
++	u64 n[ANON_AND_FILE], ns[ANON_AND_FILE], en = atomic64_read(&stat->evict_n);
++	int type;
++
++	for (type = 0; type < ANON_AND_FILE; type++) {
++		n[type] = atomic64_read(&stat->n[type]);
++		ns[type] = n[type] ? div64_u64(atomic64_read(&stat->ns[type]), n[type]) : 0;
++	}
++
++	if (!n[0] && !n[1] && !en)
++		return 0;
++	return sysfs_emit_at(buf, len,
++			     "%s: anon %llu ns (%llu) file %llu ns (%llu) swap-out %llu ns (%llu)\n",
++			     what, ns[0], n[0], ns[1], n[1],
++			     en ? div64_u64(atomic64_read(&stat->evict_ns), en) : 0, en);
 +}
 +
 +/*
@@ -4591,6 +5003,22 @@ index 0000000000..e92d6d46a5
 +			lru_cast_tune_n[type] -= lru_cast_tune_n[type] >> 1;
 +		}
 +	}
++	{
++		u64 e = 0, en = 0;
++
++		for_each_possible_cpu(cpu) {
++			e += per_cpu(lru_cast_tune_evict_ns, cpu);
++			en += per_cpu(lru_cast_tune_evicts, cpu);
++		}
++		lru_cast_tune_esum += e - lru_cast_tune_last_esum;
++		lru_cast_tune_en += en - lru_cast_tune_last_en;
++		lru_cast_tune_last_esum = e;
++		lru_cast_tune_last_en = en;
++		while (lru_cast_tune_en >= window) {
++			lru_cast_tune_esum -= lru_cast_tune_esum >> 1;
++			lru_cast_tune_en -= lru_cast_tune_en >> 1;
++		}
++	}
 +	spin_unlock_irqrestore(&lru_cast_tune_cost_lock, flags);
 +}
 +
@@ -4613,6 +5041,13 @@ index 0000000000..e92d6d46a5
 +		lru_cast_tune_last_wait[type] = w;
 +		lru_cast_tune_last_n[type] = n;
 +	}
++	lru_cast_tune_last_esum = lru_cast_tune_last_en = 0;
++	for_each_possible_cpu(cpu) {
++		lru_cast_tune_last_esum += per_cpu(lru_cast_tune_evict_ns, cpu);
++		lru_cast_tune_last_en += per_cpu(lru_cast_tune_evicts, cpu);
++	}
++	WRITE_ONCE(lru_cast_tune_esum, 0);
++	WRITE_ONCE(lru_cast_tune_en, 0);
 +	spin_unlock_irqrestore(&lru_cast_tune_cost_lock, flags);
 +}
 +
@@ -4623,10 +5058,18 @@ index 0000000000..e92d6d46a5
 +	u64 sa = READ_ONCE(lru_cast_tune_sum[0]), na = READ_ONCE(lru_cast_tune_n[0]);
 +	u64 sf = READ_ONCE(lru_cast_tune_sum[1]), nf = READ_ONCE(lru_cast_tune_n[1]);
 +	u64 m = na + nf ? div64_u64(sa + sf, na + nf) : 1;
++	u64 se = READ_ONCE(lru_cast_tune_esum), ne = READ_ONCE(lru_cast_tune_en);
 +
 +	/* (prior + sum) / (1 + n) */
 +	*ca = div64_u64(div_u64(m * (MAX_SWAPPINESS - sw), sw) + sa, 1 + na);
 +	*cf = div64_u64(m + sf, 1 + nf);
++	/*
++	 * A page of anon a split loses is also written out: in a steady
++	 * state a miss is an eviction. File's is dropped (its writeback is
++	 * owed whether it stays or not).
++	 */
++	if (ne)
++		*ca += div64_u64(se, ne);
 +	*ca = max(*ca, 1ULL);
 +	*cf = max(*cf, 1ULL);
 +}
@@ -4670,15 +5113,33 @@ index 0000000000..e92d6d46a5
 +	int len = sysfs_emit(buf, "share %u/1000\nswappiness %u\n",
 +			     lru_cast_param_share(), lru_cast_estimated_swappiness());
 +	u64 ca, cf;
++	int i;
 +
 +	lru_cast_tune_costs(&ca, &cf);
 +	len += sysfs_emit_at(buf, len,
 +			     "cost anon %llu ns (%llu waits) file %llu ns (%llu waits)\n",
 +			     ca, READ_ONCE(lru_cast_tune_n[0]),
 +			     cf, READ_ONCE(lru_cast_tune_n[1]));
-+	return len + sysfs_emit_at(buf, len, "in flight anon %d file %d\n",
-+				   atomic_read(&lru_cast_tune_inflight[0]),
-+				   atomic_read(&lru_cast_tune_inflight[1]));
++	len += sysfs_emit_at(buf, len, "swap-out %llu ns (%llu pages)\n",
++			     READ_ONCE(lru_cast_tune_en) ?
++			     div64_u64(READ_ONCE(lru_cast_tune_esum), READ_ONCE(lru_cast_tune_en)) : 0,
++			     READ_ONCE(lru_cast_tune_en));
++	len += sysfs_emit_at(buf, len, "in flight %d\n", lru_cast_wait_inflight());
++	/* what the refaults cost on each queue: the CPUs, and each device */
++	len += lru_cast_wait_stat_show(buf, len, "cpu", &lru_cast_wait_cpu_stat);
++	for (i = 0; i <= LRU_CAST_WAIT_DEVS; i++) {
++		u64 id = READ_ONCE(lru_cast_wait_devs[i].id);
++		char what[32];
++
++		if (i < LRU_CAST_WAIT_DEVS && !id)
++			continue;
++		if (i < LRU_CAST_WAIT_DEVS)
++			snprintf(what, sizeof(what), "bdi %llu", id);
++		else
++			strscpy(what, "other", sizeof(what));
++		len += lru_cast_wait_stat_show(buf, len, what, &lru_cast_wait_devs[i].stat);
++	}
++	return len;
 +}
 diff --git a/mm/lru_cast/tune/cost.h b/mm/lru_cast/tune/cost.h
 new file mode 100644
@@ -4700,7 +5161,7 @@ index 0000000000..d9ffa3dff5
 +#endif /* _MM_LRU_CAST_TUNE_COST_H */
 diff --git a/mm/lru_cast/tune/decay.c b/mm/lru_cast/tune/decay.c
 new file mode 100644
-index 0000000000..21828b30bd
+index 0000000000..3ba561fbae
 --- /dev/null
 +++ b/mm/lru_cast/tune/decay.c
 @@ -0,0 +1,76 @@
@@ -4728,7 +5189,7 @@ index 0000000000..21828b30bd
 +	int m;
 +
 +	for (m = 0; m < LRU_CAST_TUNE_DECAY; m++)
-+		le[m] = clamp(centre + lru_cast_tune_off[m], 0, LRU_CAST_LE_MAX);
++		le[m] = clamp(centre + lru_cast_tune_off[m], LRU_CAST_LE_MIN, LRU_CAST_LE_MAX);
 +	for (m = LRU_CAST_TUNE_WLO; m < LRU_CAST_TUNE_SIM; m++)
 +		le[m] = centre;
 +	for (m = 0; m < LRU_CAST_TUNE_SIM; m++)
@@ -4743,7 +5204,7 @@ index 0000000000..21828b30bd
 +	for (m = 0; m < LRU_CAST_TUNE_DECAY; m++) {
 +		int best = 0, d, bd = INT_MAX;
 +
-+		le[m] = clamp(centre + lru_cast_tune_off[m], 0, LRU_CAST_LE_MAX);
++		le[m] = clamp(centre + lru_cast_tune_off[m], LRU_CAST_LE_MIN, LRU_CAST_LE_MAX);
 +		for (i = 0; i < LRU_CAST_TUNE_DECAY; i++) {
 +			d = abs(lru_cast_tune_sim_le(sim, i) - le[m]);
 +			if (d < bd) {
@@ -5495,10 +5956,10 @@ index 0000000000..ed70aed9e1
 +#endif /* _MM_LRU_CAST_TUNE_SHARE_H */
 diff --git a/mm/lru_cast/tune/sim.c b/mm/lru_cast/tune/sim.c
 new file mode 100644
-index 0000000000..c276904a18
+index 0000000000..9610402d94
 --- /dev/null
 +++ b/mm/lru_cast/tune/sim.c
-@@ -0,0 +1,607 @@
+@@ -0,0 +1,644 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * CAST -- simulated CAST caches of a sample, and its order.
@@ -5509,6 +5970,17 @@ index 0000000000..c276904a18
 + * lowest bucket of M -- the lower goes, a tie against the page of that
 + * bucket read longest ago (policy/ring.c) -- or, the cache not yet full,
 + * joins M. A hit in M moves the page up; a hit in W only updates its state.
++ *
++ * Among pages of one key the main cache takes those read once first, in
++ * its clock's order, and those read more than once by a hash, the same of
++ * them first each time (policy/ring.c). So does each cache here: a key's
++ * bucket is LRU_CAST_TUNE_SUB of them, the first for pages read once, read
++ * longest ago first, and the rest for pages read more than once by a hash
++ * of the page, so that a loop over more than the cache keeps the same part
++ * of itself here as it does there -- ranked by when they were read, it
++ * would keep none, and the decay and W's share would be chosen for a
++ * cache that is not the one they set. A newcomer read once meets M's
++ * lowest by its key alone, as there.
 + *
 + * The order is every cache size at once. Without W, a CAST cache of any
 + * size holds the top of one order of the pages -- by key, at the decay
@@ -5532,7 +6004,8 @@ index 0000000000..c276904a18
 +#include <linux/vmalloc.h>
 +#include "tune/sim.h"
 +
-+#define LRU_CAST_TUNE_BUCKETS	256
++#define LRU_CAST_TUNE_SUB	4				/* buckets per key */
++#define LRU_CAST_TUNE_BUCKETS	(256 * LRU_CAST_TUNE_SUB)
 +#define LRU_CAST_TUNE_HEADS	(LRU_CAST_TUNE_BUCKETS + 1)	/* per cache: the buckets, then W */
 +
 +struct lru_cast_tune_slot {
@@ -5580,10 +6053,28 @@ index 0000000000..c276904a18
 +	return lru_cast_tune_head(sim, m, LRU_CAST_TUNE_BUCKETS);
 +}
 +
-+/* the key of slot @s in cache @m */
++/* the key of @w at decay @le in buckets: its key's, then which of them (see above) */
++static long lru_cast_tune_skey(struct lru_cast_tune_sim *sim, u16 s, int le)
++{
++	u32 w = sim->slot[s].w;
++	long key = lru_cast_key(w, sim->tick, le);
++
++	if (key == LONG_MIN)
++		return LONG_MIN;
++	return key * LRU_CAST_TUNE_SUB +
++	       ((w >> 24) >= 2 ? 1 + hash_64(sim->slot[s].id, 16) % (LRU_CAST_TUNE_SUB - 1) : 0);
++}
++
++/* the bucket of slot @s in cache @m */
 +static inline long lru_cast_tune_mkey(struct lru_cast_tune_sim *sim, int m, u16 s)
 +{
-+	return lru_cast_key(sim->slot[s].w, sim->tick, sim->c[m].le);
++	return lru_cast_tune_skey(sim, s, sim->c[m].le);
++}
++
++/* the lowest bucket the window of cache @m holds now */
++static inline long lru_cast_tune_window_lo(struct lru_cast_tune_sim *sim, int m)
++{
++	return lru_cast_window_lo(sim->tick, sim->c[m].le) * LRU_CAST_TUNE_SUB;
 +}
 +
 +/* ------------------------------------------------------------- lists */
@@ -5671,7 +6162,7 @@ index 0000000000..c276904a18
 +	struct lru_cast_tune_slot *sl = &sim->slot[s];
 +	struct rb_node **link = &sim->order.rb_node, *parent = NULL;
 +
-+	sl->key = lru_cast_key(sl->w, sim->tick, sim->ole);
++	sl->key = lru_cast_tune_skey(sim, s, sim->ole);
 +	sl->seq = seq;
 +	while (*link) {
 +		struct lru_cast_tune_slot *p = rb_entry(*link, struct lru_cast_tune_slot, rb);
@@ -5726,7 +6217,7 @@ index 0000000000..c276904a18
 +static void lru_cast_tune_advance(struct lru_cast_tune_sim *sim, int m)
 +{
 +	struct lru_cast_tune_cache *c = &sim->c[m];
-+	long lo = lru_cast_window_lo(sim->tick, c->le), b, end;
++	long lo = lru_cast_tune_window_lo(sim, m), b, end;
 +	u16 to;
 +
 +	if (lo <= c->lo)
@@ -5803,7 +6294,10 @@ index 0000000000..c276904a18
 +			continue;
 +		}
 +		low = lru_cast_tune_lowest(sim, m, &h);
-+		if (low == LONG_MAX || bt < low) {
++		/* read once, by its key alone: of one key, the newcomer was read last */
++		if (low == LONG_MAX ||
++		    ((sim->slot[s].w >> 24) >= 2 ? bt < low :
++		     bt / LRU_CAST_TUNE_SUB < low / LRU_CAST_TUNE_SUB)) {
 +			lru_cast_tune_evict(sim, m, s);
 +			continue;
 +		}
@@ -5840,17 +6334,21 @@ index 0000000000..c276904a18
 +	c->wcount++;
 +}
 +
-+/* a read of @s, resident in the caches of @res, in every cache and in the order: in, or up */
++/*
++ * A read of @s, resident in the caches of @res, in every cache and in the
++ * order: in, or up. Each cache is made to fit on a hit too: a size or a
++ * share set lower (lru_cast_tune_sim_set_cap(), _set_wq()) or a regrid
++ * leaves it over until it is, and a cache over its size that only hits
++ * would never be -- holding more than it may, it misses less than the
++ * others, and the decay it runs at wins.
++ */
 +void lru_cast_tune_sim_access_all(struct lru_cast_tune_sim *sim, u16 s, u32 res)
 +{
 +	int m;
 +
 +	for (m = 0; m < LRU_CAST_TUNE_SIM; m++) {
-+		bool hit = res & BIT(m);
-+
-+		lru_cast_tune_access(sim, m, s, hit);
-+		if (!hit)
-+			lru_cast_tune_balance(sim, m);
++		lru_cast_tune_access(sim, m, s, res & BIT(m));
++		lru_cast_tune_balance(sim, m);
 +	}
 +	if (!RB_EMPTY_NODE(&sim->slot[s].rb))
 +		lru_cast_tune_oerase(sim, s);
@@ -6012,7 +6510,7 @@ index 0000000000..c276904a18
 +		struct lru_cast_tune_cache *c = &sim->c[m];
 +
 +		c->le = le[m];
-+		c->lo = lru_cast_window_lo(sim->tick, c->le);
++		c->lo = lru_cast_tune_window_lo(sim, m);
 +		c->count = c->wcount = 0;
 +		bitmap_zero(c->nonempty, LRU_CAST_TUNE_BUCKETS);
 +		for (idx = 0; idx < LRU_CAST_TUNE_HEADS; idx++) {
@@ -6697,7 +7195,7 @@ index 0000000000..1b270e12a7
 +#endif /* _MM_LRU_CAST_TUNE_WORLD_H */
 diff --git a/mm/lru_cast/tune/wshare.c b/mm/lru_cast/tune/wshare.c
 new file mode 100644
-index 0000000000..8da61b3492
+index 0000000000..6cec84f0a0
 --- /dev/null
 +++ b/mm/lru_cast/tune/wshare.c
 @@ -0,0 +1,82 @@
@@ -6706,11 +7204,14 @@ index 0000000000..8da61b3492
 + * CAST -- W's share of a type's pages, chosen by measuring.
 + *
 + * A sequential test of the gradient. S sums the misses of w - 0.1C less
-+ * those of w + 0.1C, N the accesses they disagree on, since the anchor.
++ * those of w + 0.1C, N the accesses they disagree on, since w last moved.
 + * Every 1/64 of a cache of accesses, t = S / sqrt(N + 1): past +-2, w takes
-+ * a step of 0.1C / 64 towards the better side; once it is 0.1C from the
-+ * anchor -- a trust region -- the evidence is dropped and w is the new
-+ * anchor. It starts where the main cache's is.
++ * a step of 0.1C / 64 towards the better side, and the evidence is dropped:
++ * each step is taken on evidence gathered since the last. Kept, a sum that
++ * crossed once would carry w on a step every test whatever followed --
++ * and with nothing to choose between the two, a sum looked at again and
++ * again crosses 2 sooner or later: w would wander 0.1C at a time where
++ * now it only jitters. It starts where the main cache's is.
 + */
 +#include "tune/tune.h"
 +#include "tune/wshare.h"
@@ -6736,7 +7237,7 @@ index 0000000000..8da61b3492
 +			  struct lru_cast_tune_sim *sim)
 +{
 +	memset(w, 0, sizeof(*w));
-+	w->wq = w->wanchor = permille * LRU_CAST_TUNE_WUNIT / 1000;
++	w->wq = permille * LRU_CAST_TUNE_WUNIT / 1000;
 +	w->next_wtest = 8;
 +	lru_cast_tune_w_apply(w, sim);
 +}
@@ -6775,20 +7276,17 @@ index 0000000000..8da61b3492
 +		return;
 +	w->wq = wq;
 +	w->wmoves++;
-+	if (abs((int)wq - (int)w->wanchor) >= LRU_CAST_TUNE_WRANGE) {
-+		w->wanchor = wq;
-+		w->ws = w->wn = 0;
-+	}
++	w->ws = w->wn = 0;		/* each step on evidence of its own */
 +	lru_cast_tune_w_apply(w, sim);
 +	if (lru_cast_tune_auto())
 +		lru_cast_param_set_w(type, wq * 1000 / LRU_CAST_TUNE_WUNIT);
 +}
 diff --git a/mm/lru_cast/tune/wshare.h b/mm/lru_cast/tune/wshare.h
 new file mode 100644
-index 0000000000..4384cf5ef2
+index 0000000000..ac9d33c024
 --- /dev/null
 +++ b/mm/lru_cast/tune/wshare.h
-@@ -0,0 +1,22 @@
+@@ -0,0 +1,21 @@
 +/* SPDX-License-Identifier: GPL-2.0 */
 +/* CAST -- W's share and its test (wshare.c) */
 +#ifndef _MM_LRU_CAST_TUNE_WSHARE_H
@@ -6797,8 +7295,7 @@ index 0000000000..4384cf5ef2
 +#include "tune/sim.h"
 +
 +struct lru_cast_tune_w {
-+	/* W's share and the test's anchor, in LRU_CAST_TUNE_WUNIT */
-+	unsigned int wq, wanchor;
++	unsigned int wq;		/* W's share, in LRU_CAST_TUNE_WUNIT */
 +	s64 ws, wn;			/* the test: w - 0.1C's misses less w + 0.1C's, and N */
 +	unsigned long next_wtest, wmoves;
 +};
@@ -6813,7 +7310,7 @@ index 0000000000..4384cf5ef2
 +#endif /* _MM_LRU_CAST_TUNE_WSHARE_H */
 diff --git a/mm/lru_cast/version.h b/mm/lru_cast/version.h
 new file mode 100644
-index 0000000000..8c48e5aa94
+index 0000000000..976adc5130
 --- /dev/null
 +++ b/mm/lru_cast/version.h
 @@ -0,0 +1,15 @@
@@ -6829,7 +7326,7 @@ index 0000000000..8c48e5aa94
 +#define LRU_CAST_PROGNAME	"lru_cast"
 +#define LRU_CAST_AUTHOR	"Masahito Suzuki"
 +
-+#define LRU_CAST_VERSION	"0.2.0"
++#define LRU_CAST_VERSION	"0.2.5"
 +
 +#endif /* _MM_LRU_CAST_VERSION_H */
 diff --git a/mm/lru_cast/walk/bloom.c b/mm/lru_cast/walk/bloom.c
@@ -8137,10 +8634,10 @@ index 0000000000..03e0b56254
 +
 +#endif /* _MM_LRU_CAST_WALK_YOUNG_H */
 diff --git a/mm/memcontrol.c b/mm/memcontrol.c
-index 6dc4888a90..d7ec1aa1c3 100644
+index 61cf6af26f..331bfc88fb 100644
 --- a/mm/memcontrol.c
 +++ b/mm/memcontrol.c
-@@ -4022,6 +4022,7 @@ static void free_mem_cgroup_per_node_info(struct mem_cgroup_per_node *pn)
+@@ -3646,6 +3646,7 @@ static void free_mem_cgroup_per_node_info(struct mem_cgroup_per_node *pn)
  	if (!pn)
  		return;
  
@@ -8149,7 +8646,7 @@ index 6dc4888a90..d7ec1aa1c3 100644
  	kfree(pn->lruvec_stats);
  	kfree(pn);
 diff --git a/mm/memory.c b/mm/memory.c
-index ff338c2abe..3aeb6f6bf8 100644
+index 94bf107a47..26cc4cd2a0 100644
 --- a/mm/memory.c
 +++ b/mm/memory.c
 @@ -42,6 +42,7 @@
@@ -8160,25 +8657,25 @@ index ff338c2abe..3aeb6f6bf8 100644
  #include <linux/sched/mm.h>
  #include <linux/sched/numa_balancing.h>
  #include <linux/sched/task.h>
-@@ -4827,6 +4828,8 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
- 	if (folio)
- 		swap_update_readahead(folio, vma, vmf->address);
+@@ -4667,6 +4668,8 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
+ 	swapcache = folio;
+ 
  	if (!folio) {
-+		/* CAST: a wait for the page from swap, ended by the caller */
-+		lru_cast_wait_begin(LRU_CAST_ANON, true);
- 		/* Swapin bypasses readahead for SWP_SYNCHRONOUS_IO devices */
- 		if (data_race(si->flags & SWP_SYNCHRONOUS_IO))
- 			folio = swapin_sync(entry, GFP_HIGHUSER_MOVABLE,
-@@ -5083,6 +5086,8 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
- 					 rmap_flags);
- 		folio_put_swap(folio, nr_pages == 1 ? page : NULL);
++		/* CAST: the wait for it begins with its read (swap_read_folio()) */
++		lru_cast_wait_swapin(entry.val);
+ 		if (data_race(si->flags & SWP_SYNCHRONOUS_IO) &&
+ 		    __swap_count(entry) == 1) {
+ 			/* skip swapcache */
+@@ -4966,6 +4969,8 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
+ 		folio_add_anon_rmap_ptes(folio, page, nr_pages, vma, address,
+ 					rmap_flags);
  	}
 +	/* CAST: a read of the page, now that it has an identity */
 +	lru_cast_swapin(folio);
  
  	VM_BUG_ON(!folio_test_anon(folio) ||
  			(pte_write(pte) && !PageAnonExclusive(page)));
-@@ -5423,6 +5428,12 @@ static vm_fault_t __do_fault(struct vm_fault *vmf)
+@@ -5280,6 +5285,12 @@ static vm_fault_t __do_fault(struct vm_fault *vmf)
  	}
  
  	ret = vma->vm_ops->fault(vmf);
@@ -8191,7 +8688,7 @@ index ff338c2abe..3aeb6f6bf8 100644
  	if (unlikely(ret & (VM_FAULT_ERROR | VM_FAULT_NOPAGE | VM_FAULT_RETRY |
  			    VM_FAULT_DONE_COW)))
  		return ret;
-@@ -6146,6 +6157,10 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
+@@ -6003,6 +6014,10 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
  	if (!folio || folio_is_zone_device(folio))
  		goto out_map;
  
@@ -8202,7 +8699,7 @@ index ff338c2abe..3aeb6f6bf8 100644
  	nid = folio_nid(folio);
  	nr_pages = folio_nr_pages(folio);
  
-@@ -6378,8 +6393,18 @@ static vm_fault_t handle_pte_fault(struct vm_fault *vmf)
+@@ -6195,8 +6210,18 @@ static vm_fault_t handle_pte_fault(struct vm_fault *vmf)
  	if (!vmf->pte)
  		return do_pte_missing(vmf);
  
@@ -8224,7 +8721,7 @@ index ff338c2abe..3aeb6f6bf8 100644
  	if (pte_protnone(vmf->orig_pte) && vma_is_accessible(vmf->vma))
  		return do_numa_page(vmf);
 diff --git a/mm/migrate.c b/mm/migrate.c
-index d9b23909d7..df2b1b32d2 100644
+index a936623d0b..48764ada05 100644
 --- a/mm/migrate.c
 +++ b/mm/migrate.c
 @@ -14,6 +14,7 @@
@@ -8234,8 +8731,8 @@ index d9b23909d7..df2b1b32d2 100644
 +#include <linux/lru_cast.h>
  #include <linux/export.h>
  #include <linux/swap.h>
- #include <linux/leafops.h>
-@@ -763,6 +764,8 @@ void folio_migrate_flags(struct folio *newfolio, struct folio *folio)
+ #include <linux/swapops.h>
+@@ -752,6 +753,8 @@ void folio_migrate_flags(struct folio *newfolio, struct folio *folio)
  {
  	int cpupid;
  
@@ -8245,10 +8742,10 @@ index d9b23909d7..df2b1b32d2 100644
  		folio_set_referenced(newfolio);
  	if (folio_test_uptodate(folio))
 diff --git a/mm/mm_init.c b/mm/mm_init.c
-index 0f64909e8d..25eac06814 100644
+index 7712d887b6..ca2b5d3fdd 100644
 --- a/mm/mm_init.c
 +++ b/mm/mm_init.c
-@@ -1395,6 +1395,9 @@ static void __meminit pgdat_init_internals(struct pglist_data *pgdat)
+@@ -1412,6 +1412,9 @@ static void __meminit pgdat_init_internals(struct pglist_data *pgdat)
  	pgdat_init_kcompactd(pgdat);
  
  	init_waitqueue_head(&pgdat->kswapd_wait);
@@ -8279,10 +8776,10 @@ index 0c8f181d9d..b1ca3a0575 100644
  
  #if defined(CONFIG_NUMA_BALANCING) && !defined(LAST_CPUPID_NOT_IN_PAGE_FLAGS)
 diff --git a/mm/page_alloc.c b/mm/page_alloc.c
-index ee902a468c..01bc204827 100644
+index 6288c7e4b9..e8d082c3af 100644
 --- a/mm/page_alloc.c
 +++ b/mm/page_alloc.c
-@@ -46,6 +46,7 @@
+@@ -47,6 +47,7 @@
  #include <linux/sched/mm.h>
  #include <linux/page_owner.h>
  #include <linux/page_table_check.h>
@@ -8290,7 +8787,7 @@ index ee902a468c..01bc204827 100644
  #include <linux/memcontrol.h>
  #include <linux/ftrace.h>
  #include <linux/lockdep.h>
-@@ -1406,6 +1407,7 @@ static __always_inline bool __free_pages_prepare(struct page *page,
+@@ -1433,6 +1434,7 @@ __always_inline bool __free_pages_prepare(struct page *page,
  	reset_page_owner(page, order);
  	page_table_check_free(page, order);
  	pgalloc_tag_sub(page, 1 << order);
@@ -8299,19 +8796,20 @@ index ee902a468c..01bc204827 100644
  	if (!PageHighMem(page) && !(fpi_flags & FPI_TRYLOCK)) {
  		debug_check_no_locks_freed(page_address(page),
 diff --git a/mm/page_io.c b/mm/page_io.c
-index b23f494fcc..bdd829bf1a 100644
+index 3c342db77c..538a8c8c8f 100644
 --- a/mm/page_io.c
 +++ b/mm/page_io.c
-@@ -25,6 +25,8 @@
+@@ -25,6 +25,9 @@
  #include <linux/sched/task.h>
  #include <linux/delayacct.h>
  #include <linux/zswap.h>
 +#include <linux/kfifo.h>
++#include <linux/backing-dev.h>
 +#include <linux/lru_cast.h>
  #include "swap.h"
- #include "swap_table.h"
  
-@@ -50,6 +52,26 @@ static void __end_swap_bio_write(struct bio *bio)
+ static void __end_swap_bio_write(struct bio *bio)
+@@ -49,8 +52,36 @@ static void __end_swap_bio_write(struct bio *bio)
  	folio_end_writeback(folio);
  }
  
@@ -8335,11 +8833,21 @@ index b23f494fcc..bdd829bf1a 100644
 +}
 +#endif /* CONFIG_LRU_CAST */
 +
++/* CAST: the device a swap bio queues on */
++static inline u64 swap_bio_dev(struct bio *bio)
++{
++	return bio->bi_bdev->bd_disk->bdi->id;
++}
++
  static void end_swap_bio_write(struct bio *bio)
  {
++	/* CAST: a swap-out queued on its device, ended (swap_writepage_bdev_async()) */
++	lru_cast_evict_io_end(swap_bio_dev(bio), folio_nr_pages(bio_first_folio_all(bio)));
  	__end_swap_bio_write(bio);
-@@ -244,11 +266,167 @@ static void swap_zeromap_folio_clear(struct folio *folio)
- 	swap_cluster_unlock(ci);
+ 	bio_put(bio);
+ }
+@@ -233,12 +264,173 @@ static void swap_zeromap_folio_clear(struct folio *folio)
+ 	}
  }
  
 +/*
@@ -8352,7 +8860,10 @@ index b23f494fcc..bdd829bf1a 100644
 + */
 +static inline void do_swapout(struct folio *folio, struct swap_iocb **swap_plug)
 +{
++	u64 t0 = lru_cast_evict_start();	/* CAST: zswap's compression */
++
 +	if (zswap_store(folio)) {
++		lru_cast_evict_cpu(t0, folio_nr_pages(folio));
 +		count_mthp_stat(folio_order(folio), MTHP_STAT_ZSWPOUT);
 +		folio_unlock(folio);
 +	} else
@@ -8505,9 +9016,30 @@ index b23f494fcc..bdd829bf1a 100644
 +static int __swap_writeout(struct folio *folio, struct swap_iocb **swap_plug,
 +			   bool handoff)
  {
++	unsigned long nr;
++	u64 t0;
  	int ret = 0;
  
-@@ -282,6 +460,14 @@ int swap_writeout(struct folio *folio, struct swap_iocb **swap_plug)
+ 	if (folio_free_swap(folio))
+@@ -253,6 +445,9 @@ int swap_writeout(struct folio *folio, struct swap_iocb **swap_plug)
+ 		folio_mark_dirty(folio);
+ 		goto out_unlock;
+ 	}
++	/* CAST: what writing it out costs, if done here, by the CPU */
++	t0 = lru_cast_evict_start();
++	nr = folio_nr_pages(folio);
+ 
+ 	/*
+ 	 * Use a bitmap (zeromap) to avoid doing IO for zero-filled pages.
+@@ -262,6 +457,7 @@ int swap_writeout(struct folio *folio, struct swap_iocb **swap_plug)
+ 	 */
+ 	if (is_folio_zero_filled(folio)) {
+ 		swap_zeromap_folio_set(folio);
++		lru_cast_evict_cpu(t0, nr);
+ 		goto out_unlock;
+ 	}
+ 
+@@ -272,8 +468,17 @@ int swap_writeout(struct folio *folio, struct swap_iocb **swap_plug)
  	 */
  	swap_zeromap_folio_clear(folio);
  
@@ -8521,8 +9053,11 @@ index b23f494fcc..bdd829bf1a 100644
 +
  	if (zswap_store(folio)) {
  		count_mthp_stat(folio_order(folio), MTHP_STAT_ZSWPOUT);
++		lru_cast_evict_cpu(t0, nr);
  		goto out_unlock;
-@@ -302,6 +488,92 @@ int swap_writeout(struct folio *folio, struct swap_iocb **swap_plug)
+ 	}
+ 	if (!mem_cgroup_zswap_writeback_enabled(folio_memcg(folio))) {
+@@ -288,6 +493,92 @@ int swap_writeout(struct folio *folio, struct swap_iocb **swap_plug)
  	return ret;
  }
  
@@ -8615,8 +9150,20 @@ index b23f494fcc..bdd829bf1a 100644
  static inline void count_swpout_vm_event(struct folio *folio)
  {
  #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-@@ -446,6 +718,49 @@ static void swap_writepage_bdev_sync(struct folio *folio,
+@@ -410,6 +701,8 @@ static void swap_writepage_fs(struct folio *folio, struct swap_iocb **swap_plug)
+ static void swap_writepage_bdev_sync(struct folio *folio,
+ 		struct swap_info_struct *sis)
+ {
++	u64 t0 = lru_cast_evict_start();	/* CAST: the device's work, done by this CPU */
++	unsigned long nr = folio_nr_pages(folio);
+ 	struct bio_vec bv;
+ 	struct bio bio;
+ 
+@@ -425,8 +718,58 @@ static void swap_writepage_bdev_sync(struct folio *folio,
+ 
+ 	submit_bio_wait(&bio);
  	__end_swap_bio_write(&bio);
++	lru_cast_evict_cpu(t0, nr);
  }
  
 +#ifdef CONFIG_LRU_CAST
@@ -8628,8 +9175,13 @@ index b23f494fcc..bdd829bf1a 100644
 +static void swap_writepage_bdev_sync_batch(struct folio **folios,
 +		unsigned int n, struct swap_info_struct *sis)
 +{
++	u64 t0 = lru_cast_evict_start();	/* CAST: the device's work, done by this CPU */
++	unsigned long nr = 0;
 +	unsigned int i = 0;
 +
++	for (i = 0; i < n; i++)
++		nr += folio_nr_pages(folios[i]);
++	i = 0;
 +	while (i < n) {
 +		struct bio *bio;
 +		sector_t next = swap_folio_sector(folios[i]);
@@ -8659,50 +9211,85 @@ index b23f494fcc..bdd829bf1a 100644
 +		__end_swap_bio_write_batch(bio);
 +		bio_put(bio);
 +	}
++	lru_cast_evict_cpu(t0, nr);
 +}
 +#endif /* CONFIG_LRU_CAST */
 +
  static void swap_writepage_bdev_async(struct folio *folio,
  		struct swap_info_struct *sis)
  {
+@@ -441,6 +784,8 @@ static void swap_writepage_bdev_async(struct folio *folio,
+ 	count_swpout_vm_event(folio);
+ 	folio_start_writeback(folio);
+ 	folio_unlock(folio);
++	/* CAST: the write queues on the device, until end_swap_bio_write() */
++	lru_cast_evict_io_begin(swap_bio_dev(bio));
+ 	submit_bio(bio);
+ }
+ 
+@@ -629,6 +974,12 @@ void swap_read_folio(struct folio *folio, struct swap_iocb **plug)
+ 	}
+ 	delayacct_swapin_start();
+ 
++	/*
++	 * CAST: the page a fault waits for, read now -- by this CPU, unless it
++	 * is read from a device that queues it (lru_cast_wait_swap_queued())
++	 */
++	lru_cast_wait_swap_read(folio->swap.val, folio_nr_pages(folio));
++
+ 	if (swap_read_folio_zeromap(folio)) {
+ 		folio_unlock(folio);
+ 		goto finish;
+@@ -640,6 +991,11 @@ void swap_read_folio(struct folio *folio, struct swap_iocb **plug)
+ 	/* We have to read from slower devices. Increase zswap protection. */
+ 	zswap_folio_swapin(folio);
+ 
++	if (!synchronous || data_race(sis->flags & SWP_FS_OPS)) {
++		if (lru_cast_wait_swap_mine(folio->swap.val, folio_nr_pages(folio)))
++			lru_cast_wait_swap_queued(inode_to_bdi(file_inode(sis->swap_file))->id);
++	}
++
+ 	if (data_race(sis->flags & SWP_FS_OPS)) {
+ 		swap_read_folio_fs(folio, plug);
+ 	} else if (synchronous) {
 diff --git a/mm/rmap.c b/mm/rmap.c
-index 1c77d5dc06..d0289d195b 100644
+index 8f3c50bd11..1232004f38 100644
 --- a/mm/rmap.c
 +++ b/mm/rmap.c
-@@ -981,6 +981,9 @@ static bool folio_referenced_one(struct folio *folio,
- 		if (lru_gen_enabled() && !lru_gen_switching() && pvmw.pte) {
- 			if (lru_gen_look_around(&pvmw, nr))
+@@ -897,6 +897,9 @@ static bool folio_referenced_one(struct folio *folio,
+ 		if (lru_gen_enabled() && pvmw.pte) {
+ 			if (lru_gen_look_around(&pvmw))
  				referenced++;
 +		} else if (lru_cast_enabled() && pvmw.pte) {
 +			if (lru_cast_look_around(&pvmw))
 +				referenced++;
  		} else if (pvmw.pte) {
- 			if (clear_flush_young_ptes_notify(vma, address, pvmw.pte, nr))
- 				referenced++;
+ 			if (ptep_clear_flush_young_notify(vma, address,
+ 						pvmw.pte))
 diff --git a/mm/shmem.c b/mm/shmem.c
-index b51f83c970..028a384a9e 100644
+index 94c5b0d78a..f56d60017a 100644
 --- a/mm/shmem.c
 +++ b/mm/shmem.c
 @@ -67,6 +67,7 @@ static struct vfsmount *shm_mnt __ro_after_init;
  #include <linux/splice.h>
  #include <linux/security.h>
- #include <linux/leafops.h>
+ #include <linux/swapops.h>
 +#include <linux/lru_cast.h>
  #include <linux/mempolicy.h>
  #include <linux/namei.h>
  #include <linux/ctype.h>
-@@ -2271,6 +2272,9 @@ static int shmem_swapin_folio(struct inode *inode, pgoff_t index,
+@@ -2321,6 +2322,9 @@ static int shmem_swapin_folio(struct inode *inode, pgoff_t index,
  	/* Look it up and read it in.. */
  	folio = swap_cache_get_folio(swap);
  	if (!folio) {
-+		/* CAST: a swap-in for a fault, ended by __do_fault() */
++		/* CAST: a swap-in for a fault, begun with its read, ended by __do_fault() */
 +		if (fault_type)
-+			lru_cast_wait_begin(LRU_CAST_ANON, true);
++			lru_cast_wait_swapin(swap.val);
  		if (data_race(si->flags & SWP_SYNCHRONOUS_IO)) {
  			/* Direct swapin skipping swap cache & readahead */
- 			folio = shmem_swap_alloc_folio(inode, vmf, index,
+ 			folio = shmem_swap_alloc_folio(inode, vma, index,
 diff --git a/mm/swap.c b/mm/swap.c
-index 588f50d8f1..4f9d05a597 100644
+index 2260dcd277..2761a610c4 100644
 --- a/mm/swap.c
 +++ b/mm/swap.c
 @@ -24,6 +24,7 @@
@@ -8713,7 +9300,7 @@ index 588f50d8f1..4f9d05a597 100644
  #include <linux/percpu_counter.h>
  #include <linux/memremap.h>
  #include <linux/percpu.h>
-@@ -497,6 +498,16 @@ void folio_mark_accessed(struct folio *folio)
+@@ -456,6 +457,16 @@ void folio_mark_accessed(struct folio *folio)
  {
  	if (folio_test_dropbehind(folio))
  		return;
@@ -8730,9 +9317,9 @@ index 588f50d8f1..4f9d05a597 100644
  	if (lru_gen_enabled()) {
  		lru_gen_inc_refs(folio);
  		return;
-@@ -559,6 +570,10 @@ void folio_add_lru(struct folio *folio)
- 			folio_mark_accessed(folio);
- 	}
+@@ -508,6 +519,10 @@ void folio_add_lru(struct folio *folio)
+ 	    lru_gen_in_fault() && !(current->flags & PF_MEMALLOC))
+ 		folio_set_active(folio);
  
 +	/* CAST: a folio new to the cache, its entry is its read */
 +	if (lru_cast_enabled())
@@ -8741,20 +9328,11 @@ index 588f50d8f1..4f9d05a597 100644
  	folio_batch_add_and_move(folio, lru_add);
  }
  EXPORT_SYMBOL(folio_add_lru);
-@@ -1166,6 +1181,8 @@ void lru_reparent_memcg(struct mem_cgroup *memcg, struct mem_cgroup *parent, int
- 	parent_lruvec = mem_cgroup_lruvec(parent, NODE_DATA(nid));
- 	parent_lruvec->anon_cost += child_lruvec->anon_cost;
- 	parent_lruvec->file_cost += child_lruvec->file_cost;
-+	/* CAST: the folios of M carry their lruvec's number in their tags */
-+	lru_cast_reparent(child_lruvec, parent_lruvec);
- 
- 	for_each_lru(lru)
- 		lruvec_reparent_lru(child_lruvec, parent_lruvec, lru, nid);
 diff --git a/mm/swap.h b/mm/swap.h
-index 77d2d14eda..c1f4cec8bf 100644
+index c6bdc5d215..0796fb8ea8 100644
 --- a/mm/swap.h
 +++ b/mm/swap.h
-@@ -250,7 +250,20 @@ static inline void swap_read_unplug(struct swap_iocb *plug)
+@@ -195,7 +195,20 @@ static inline void swap_read_unplug(struct swap_iocb *plug)
  }
  void swap_write_unplug(struct swap_iocb *sio);
  int swap_writeout(struct folio *folio, struct swap_iocb **swap_plug);
@@ -8775,7 +9353,7 @@ index 77d2d14eda..c1f4cec8bf 100644
  
  /* linux/mm/swap_state.c */
  extern struct address_space swap_space __read_mostly;
-@@ -433,6 +446,12 @@ static inline int swap_writeout(struct folio *folio,
+@@ -397,6 +410,12 @@ static inline int swap_writeout(struct folio *folio,
  	return 0;
  }
  
@@ -8785,14 +9363,14 @@ index 77d2d14eda..c1f4cec8bf 100644
 +	return 0;
 +}
 +
- static inline int swap_retry_table_alloc(swp_entry_t entry, gfp_t gfp)
+ static inline void swapcache_clear(struct swap_info_struct *si, swp_entry_t entry, int nr)
  {
- 	return -EINVAL;
+ }
 diff --git a/mm/vmscan.c b/mm/vmscan.c
-index 35c3bb15ae..dabb6b9bfd 100644
+index 95b1179a14..bc5cc78a04 100644
 --- a/mm/vmscan.c
 +++ b/mm/vmscan.c
-@@ -146,6 +146,9 @@ struct scan_control {
+@@ -147,6 +147,9 @@ struct scan_control {
  	/* The file folios on the current node are dangerously low */
  	unsigned int file_is_tiny:1;
  
@@ -8802,7 +9380,7 @@ index 35c3bb15ae..dabb6b9bfd 100644
  	/* Always discard instead of demoting to lower tier memory */
  	unsigned int no_demotion:1;
  
-@@ -375,6 +378,21 @@ unsigned long zone_reclaimable_pages(struct zone *zone)
+@@ -397,6 +400,21 @@ unsigned long zone_reclaimable_pages(struct zone *zone)
  
  	nr = zone_page_state_snapshot(zone, NR_ZONE_INACTIVE_FILE) +
  		zone_page_state_snapshot(zone, NR_ZONE_ACTIVE_FILE);
@@ -8824,7 +9402,7 @@ index 35c3bb15ae..dabb6b9bfd 100644
  	if (can_reclaim_anon_pages(NULL, zone_to_nid(zone), NULL))
  		nr += zone_page_state_snapshot(zone, NR_ZONE_INACTIVE_ANON) +
  			zone_page_state_snapshot(zone, NR_ZONE_ACTIVE_ANON);
-@@ -610,6 +628,8 @@ typedef enum {
+@@ -644,6 +662,8 @@ typedef enum {
  	PAGE_SUCCESS,
  	/* folio is clean and locked */
  	PAGE_CLEAN,
@@ -8832,8 +9410,8 @@ index 35c3bb15ae..dabb6b9bfd 100644
 +	PAGE_HANDED,
  } pageout_t;
  
- /*
-@@ -654,8 +674,15 @@ static pageout_t pageout(struct folio *folio, struct address_space *mapping,
+ static pageout_t writeout(struct folio *folio, struct address_space *mapping,
+@@ -661,8 +681,15 @@ static pageout_t writeout(struct folio *folio, struct address_space *mapping,
  	if (shmem_mapping(mapping))
  		res = shmem_writeout(folio, plug, folio_list);
  	else
@@ -8850,7 +9428,7 @@ index 35c3bb15ae..dabb6b9bfd 100644
  	if (res < 0)
  		handle_write_error(mapping, folio, res);
  	if (res == AOP_WRITEPAGE_ACTIVATE) {
-@@ -891,6 +918,39 @@ static enum folio_references folio_check_references(struct folio *folio,
+@@ -939,6 +966,39 @@ static enum folio_references folio_check_references(struct folio *folio,
  
  	referenced_folio = folio_test_clear_referenced(folio);
  
@@ -8890,7 +9468,7 @@ index 35c3bb15ae..dabb6b9bfd 100644
  	if (referenced_ptes) {
  		/*
  		 * All mapped folios start out with page table
-@@ -1408,6 +1468,15 @@ static unsigned int shrink_folio_list(struct list_head *folio_list,
+@@ -1474,6 +1534,15 @@ static unsigned int shrink_folio_list(struct list_head *folio_list,
  					nr_pages = 1;
  				}
  				goto activate_locked;
@@ -8906,7 +9484,7 @@ index 35c3bb15ae..dabb6b9bfd 100644
  			case PAGE_SUCCESS:
  				if (nr_pages > 1 && !folio_test_large(folio)) {
  					sc->nr_scanned -= (nr_pages - 1);
-@@ -1773,6 +1842,53 @@ static unsigned long isolate_lru_folios(unsigned long nr_to_scan,
+@@ -1839,6 +1908,53 @@ static unsigned long isolate_lru_folios(unsigned long nr_to_scan,
  	return nr_taken;
  }
  
@@ -8960,9 +9538,9 @@ index 35c3bb15ae..dabb6b9bfd 100644
  /**
   * folio_isolate_lru() - Try to isolate a folio from its LRU list.
   * @folio: Folio to isolate from its LRU list.
-@@ -2014,8 +2130,12 @@ static unsigned long shrink_inactive_list(unsigned long nr_to_scan,
+@@ -2043,8 +2159,12 @@ static unsigned long shrink_inactive_list(unsigned long nr_to_scan,
  
- 	lruvec_lock_irq(lruvec);
+ 	spin_lock_irq(&lruvec->lru_lock);
  
 -	nr_taken = isolate_lru_folios(nr_to_scan, lruvec, &folio_list,
 -				     &nr_scanned, sc, lru);
@@ -8975,7 +9553,7 @@ index 35c3bb15ae..dabb6b9bfd 100644
  
  	__mod_node_page_state(pgdat, NR_ISOLATED_ANON + file, nr_taken);
  	item = PGSCAN_KSWAPD + reclaimer_offset(sc);
-@@ -2179,6 +2299,33 @@ static unsigned int reclaim_folio_list(struct list_head *folio_list,
+@@ -2251,6 +2371,33 @@ static unsigned int reclaim_folio_list(struct list_head *folio_list,
  	return nr_reclaimed;
  }
  
@@ -9009,7 +9587,7 @@ index 35c3bb15ae..dabb6b9bfd 100644
  unsigned long reclaim_pages(struct list_head *folio_list)
  {
  	int nid;
-@@ -2215,6 +2362,11 @@ unsigned long reclaim_pages(struct list_head *folio_list)
+@@ -2287,6 +2434,11 @@ unsigned long reclaim_pages(struct list_head *folio_list)
  static unsigned long shrink_list(enum lru_list lru, unsigned long nr_to_scan,
  				 struct lruvec *lruvec, struct scan_control *sc)
  {
@@ -9021,7 +9599,7 @@ index 35c3bb15ae..dabb6b9bfd 100644
  	if (is_active_lru(lru)) {
  		if (sc->may_deactivate & (1 << is_file_lru(lru)))
  			shrink_active_list(nr_to_scan, lruvec, sc, lru);
-@@ -2382,6 +2534,14 @@ static void prepare_scan_control(pg_data_t *pgdat, struct scan_control *sc)
+@@ -2454,6 +2606,14 @@ static void prepare_scan_control(pg_data_t *pgdat, struct scan_control *sc)
  			!(sc->may_deactivate & DEACTIVATE_ANON) &&
  			anon >> sc->priority;
  	}
@@ -9036,7 +9614,7 @@ index 35c3bb15ae..dabb6b9bfd 100644
  }
  
  static inline void calculate_pressure_balance(struct scan_control *sc,
-@@ -2501,6 +2661,43 @@ static void get_scan_count(struct lruvec *lruvec, struct scan_control *sc,
+@@ -2574,6 +2734,43 @@ static void get_scan_count(struct lruvec *lruvec, struct scan_control *sc,
  	enum scan_balance scan_balance;
  	enum lru_list lru;
  
@@ -9080,7 +9658,7 @@ index 35c3bb15ae..dabb6b9bfd 100644
  	/* If we have no swap space, do not bother scanning anon folios. */
  	if (!sc->may_swap || !can_reclaim_anon_pages(memcg, pgdat->node_id, sc)) {
  		scan_balance = SCAN_FILE;
-@@ -2574,6 +2771,10 @@ static void get_scan_count(struct lruvec *lruvec, struct scan_control *sc,
+@@ -2647,6 +2844,10 @@ static void get_scan_count(struct lruvec *lruvec, struct scan_control *sc,
  		if (!scan && !mem_cgroup_online(memcg))
  			scan = min(lruvec_size, SWAP_CLUSTER_MAX);
  
@@ -9091,17 +9669,17 @@ index 35c3bb15ae..dabb6b9bfd 100644
  		switch (scan_balance) {
  		case SCAN_EQUAL:
  			/* Scan lists relative to size */
-@@ -2625,7 +2826,8 @@ static bool can_age_anon_pages(struct lruvec *lruvec,
+@@ -2697,7 +2898,8 @@ static bool can_age_anon_pages(struct lruvec *lruvec,
+ 
  #ifdef CONFIG_LRU_GEN
  
- DEFINE_STATIC_KEY_FALSE(lru_switch);
 -#ifdef CONFIG_LRU_GEN_ENABLED
 +/* with CAST, CAST comes on at boot: MGLRU only without it (init_lru_gen()) */
 +#if defined(CONFIG_LRU_GEN_ENABLED) && !defined(CONFIG_LRU_CAST)
  DEFINE_STATIC_KEY_ARRAY_TRUE(lru_gen_caps, NR_LRU_GEN_CAPS);
  #define get_cap(cap)	static_branch_likely(&lru_gen_caps[cap])
  #else
-@@ -5262,12 +5464,15 @@ static bool drain_evictable(struct lruvec *lruvec)
+@@ -5201,12 +5403,15 @@ static bool drain_evictable(struct lruvec *lruvec)
  	return true;
  }
  
@@ -9118,7 +9696,7 @@ index 35c3bb15ae..dabb6b9bfd 100644
  	cgroup_lock();
  	cpus_read_lock();
  	get_online_mems();
-@@ -5276,6 +5481,11 @@ static void lru_gen_change_state(bool enabled)
+@@ -5215,6 +5420,11 @@ static void lru_gen_change_state(bool enabled)
  	if (enabled == lru_gen_enabled())
  		goto unlock;
  
@@ -9127,10 +9705,10 @@ index 35c3bb15ae..dabb6b9bfd 100644
 +		goto unlock;
 +	}
 +
- 	static_branch_enable_cpuslocked(&lru_switch);
- 
  	if (enabled)
-@@ -5316,6 +5526,8 @@ static void lru_gen_change_state(bool enabled)
+ 		static_branch_enable_cpuslocked(&lru_gen_caps[LRU_GEN_CORE]);
+ 	else
+@@ -5250,6 +5460,8 @@ static void lru_gen_change_state(bool enabled)
  	put_online_mems();
  	cpus_read_unlock();
  	cgroup_unlock();
@@ -9139,7 +9717,7 @@ index 35c3bb15ae..dabb6b9bfd 100644
  }
  
  /******************************************************************************
-@@ -5376,9 +5588,12 @@ static ssize_t enabled_store(struct kobject *kobj, struct kobj_attribute *attr,
+@@ -5310,9 +5522,12 @@ static ssize_t enabled_store(struct kobject *kobj, struct kobj_attribute *attr,
  	for (i = 0; i < NR_LRU_GEN_CAPS; i++) {
  		bool enabled = caps & BIT(i);
  
@@ -9155,7 +9733,7 @@ index 35c3bb15ae..dabb6b9bfd 100644
  			static_branch_enable(&lru_gen_caps[i]);
  		else
  			static_branch_disable(&lru_gen_caps[i]);
-@@ -5850,6 +6065,16 @@ static int __init init_lru_gen(void)
+@@ -5790,6 +6005,16 @@ static int __init init_lru_gen(void)
  	debugfs_create_file_aux_num("lru_gen_full", 0444, NULL, NULL, true,
  				    &lru_gen_ro_fops);
  
@@ -9172,7 +9750,7 @@ index 35c3bb15ae..dabb6b9bfd 100644
  	return 0;
  };
  late_initcall(init_lru_gen);
-@@ -5912,8 +6137,14 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
+@@ -5849,8 +6074,14 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
  				sc->priority == DEF_PRIORITY);
  
  	blk_start_plug(&plug);
@@ -9188,7 +9766,7 @@ index 35c3bb15ae..dabb6b9bfd 100644
  		unsigned long nr_anon, nr_file, percentage;
  		unsigned long nr_scanned;
  
-@@ -5986,9 +6217,10 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
+@@ -5923,9 +6154,10 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
  
  	/*
  	 * Even if we did not try to evict anon pages at all, we want to
@@ -9201,8 +9779,8 @@ index 35c3bb15ae..dabb6b9bfd 100644
  	    inactive_is_low(lruvec, LRU_INACTIVE_ANON))
  		shrink_active_list(SWAP_CLUSTER_MAX, lruvec,
  				   sc, LRU_ACTIVE_ANON);
-@@ -6823,6 +7055,10 @@ static void kswapd_age_node(struct pglist_data *pgdat, struct scan_control *sc)
- 
+@@ -6765,6 +6997,10 @@ static void kswapd_age_node(struct pglist_data *pgdat, struct scan_control *sc)
+ 		return;
  	}
  
 +	/* CAST has no active list to age: its order is the key */
@@ -9212,7 +9790,7 @@ index 35c3bb15ae..dabb6b9bfd 100644
  	lruvec = mem_cgroup_lruvec(NULL, pgdat);
  	if (!can_age_anon_pages(lruvec, sc))
  		return;
-@@ -7593,6 +7829,9 @@ unsigned long shrink_all_memory(unsigned long nr_to_reclaim)
+@@ -7504,6 +7740,9 @@ unsigned long shrink_all_memory(unsigned long nr_to_reclaim)
  void __meminit kswapd_run(int nid)
  {
  	pg_data_t *pgdat = NODE_DATA(nid);
@@ -9222,7 +9800,7 @@ index 35c3bb15ae..dabb6b9bfd 100644
  
  	pgdat_kswapd_lock(pgdat);
  	if (!pgdat->kswapd) {
-@@ -7606,7 +7845,32 @@ void __meminit kswapd_run(int nid)
+@@ -7517,7 +7756,32 @@ void __meminit kswapd_run(int nid)
  		} else {
  			wake_up_process(pgdat->kswapd);
  		}
@@ -9255,7 +9833,7 @@ index 35c3bb15ae..dabb6b9bfd 100644
  	pgdat_kswapd_unlock(pgdat);
  }
  
-@@ -7625,6 +7889,13 @@ void __meminit kswapd_stop(int nid)
+@@ -7536,6 +7800,13 @@ void __meminit kswapd_stop(int nid)
  		kthread_stop(kswapd);
  		pgdat->kswapd = NULL;
  	}
@@ -9270,7 +9848,7 @@ index 35c3bb15ae..dabb6b9bfd 100644
  }
  
 diff --git a/mm/workingset.c b/mm/workingset.c
-index f351798e72..d8f2a2a800 100644
+index 68a76a9111..21574f116c 100644
 --- a/mm/workingset.c
 +++ b/mm/workingset.c
 @@ -6,6 +6,7 @@
@@ -9281,15 +9859,15 @@ index f351798e72..d8f2a2a800 100644
  #include <linux/mm_inline.h>
  #include <linux/writeback.h>
  #include <linux/shmem_fs.h>
-@@ -183,6 +184,7 @@
+@@ -182,6 +183,7 @@
  
  #define WORKINGSET_SHIFT 1
  #define EVICTION_SHIFT	((BITS_PER_LONG - BITS_PER_XA_VALUE) +	\
 +			 LRU_CAST_SHADOW_KIND + \
  			 WORKINGSET_SHIFT + NODES_SHIFT + \
  			 MEM_CGROUP_ID_SHIFT)
- #define EVICTION_SHIFT_ANON	(EVICTION_SHIFT + SWAP_COUNT_SHIFT)
-@@ -206,6 +208,7 @@ static void *pack_shadow(int memcgid, pg_data_t *pgdat, unsigned long eviction,
+ #define EVICTION_MASK	(~0UL >> EVICTION_SHIFT)
+@@ -203,6 +205,7 @@ static void *pack_shadow(int memcgid, pg_data_t *pgdat, unsigned long eviction,
  	eviction = (eviction << MEM_CGROUP_ID_SHIFT) | memcgid;
  	eviction = (eviction << NODES_SHIFT) | pgdat->node_id;
  	eviction = (eviction << WORKINGSET_SHIFT) | workingset;
@@ -9297,7 +9875,7 @@ index f351798e72..d8f2a2a800 100644
  
  	return xa_mk_value(eviction);
  }
-@@ -217,6 +220,7 @@ static void unpack_shadow(void *shadow, int *memcgidp, pg_data_t **pgdat,
+@@ -214,6 +217,7 @@ static void unpack_shadow(void *shadow, int *memcgidp, pg_data_t **pgdat,
  	int memcgid, nid;
  	bool workingset;
  
@@ -9305,7 +9883,7 @@ index f351798e72..d8f2a2a800 100644
  	workingset = entry & ((1UL << WORKINGSET_SHIFT) - 1);
  	entry >>= WORKINGSET_SHIFT;
  	nid = entry & ((1UL << NODES_SHIFT) - 1);
-@@ -302,6 +306,12 @@ static void lru_gen_refault(struct folio *folio, void *shadow)
+@@ -293,6 +297,12 @@ static void lru_gen_refault(struct folio *folio, void *shadow)
  
  	rcu_read_lock();
  
@@ -9315,10 +9893,10 @@ index f351798e72..d8f2a2a800 100644
 +		goto unlock;
 +	}
 +
- 	recent = lru_gen_test_recent(shadow, &lruvec, &token, &workingset, type);
+ 	recent = lru_gen_test_recent(shadow, &lruvec, &token, &workingset);
  	if (lruvec != folio_lruvec(folio))
  		goto unlock;
-@@ -405,6 +415,9 @@ void *workingset_eviction(struct folio *folio, struct mem_cgroup *target_memcg)
+@@ -393,6 +403,9 @@ void *workingset_eviction(struct folio *folio, struct mem_cgroup *target_memcg)
  	if (lru_gen_enabled())
  		return lru_gen_eviction(folio);
  
@@ -9327,8 +9905,8 @@ index f351798e72..d8f2a2a800 100644
 +
  	lruvec = mem_cgroup_lruvec(target_memcg, pgdat);
  	/* XXX: target_memcg can be NULL, go through lruvec */
- 	memcgid = mem_cgroup_private_id(lruvec_memcg(lruvec));
-@@ -439,6 +452,15 @@ bool workingset_test_recent(void *shadow, bool file, bool *workingset,
+ 	memcgid = mem_cgroup_id(lruvec_memcg(lruvec));
+@@ -427,6 +440,15 @@ bool workingset_test_recent(void *shadow, bool file, bool *workingset,
  	struct pglist_data *pgdat;
  	unsigned long eviction;
  
@@ -9344,7 +9922,7 @@ index f351798e72..d8f2a2a800 100644
  	if (lru_gen_enabled()) {
  		bool recent;
  
-@@ -560,6 +582,11 @@ void workingset_refault(struct folio *folio, void *shadow)
+@@ -547,6 +569,11 @@ void workingset_refault(struct folio *folio, void *shadow)
  		return;
  	}
  
