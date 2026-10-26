@@ -37,7 +37,7 @@ Legend — ✅ behaves as expected · ⚠️ works with a trade-off · ❌ not p
 | What a page is ranked by | ⚠️ recency, two buckets | ⚠️ recency, four generations (tiers add a little frequency for files read through `read()`) | ✅ frequency and recency (LRFU), a key in 1/16 half-life steps |
 | Rank tuning | — | — | ✅ the decay chosen by measurement, per type |
 | anon/file split | ⚠️ `vm.swappiness` as a fixed scan ratio, plus rules (`cache_trim_mode`, `file_is_tiny`) | ❌ `vm.swappiness` reduced to a per-generation hint | ✅ chosen from each type's measured miss-ratio curve and refault cost |
-| What a refault costs | ⚠️ counted as I/O events | ⚠️ counted as refaults | ✅ measured: nanoseconds a task waited |
+| What a refault costs | ⚠️ counted as I/O events | ⚠️ counted as refaults | ✅ measured: the time a task waited, less its time queued behind others |
 | Streaming read past a working set | ❌ working set evicted | ❌ working set evicted | ✅ newcomers wait in a window and must outrank the working set to stay |
 | Compression stall | ❌ kswapd blocks in `zswap_store` | ❌ same | ✅ per-node `kcompressd` writes the page and finishes its reclaim |
 | Clean-file floor | ❌ none | ❌ none | ✅ `clean_min_ratio` (from [le9uo](https://github.com/firelzrd/le9uo)) |
@@ -114,7 +114,7 @@ So CAST spends CPU to choose well: it records every read in the page's state wor
    │  M  the rest, no order (active)    │      │  set from simulated caches and │
    │  reclaim: W's tail vs M's lowest   │      │  miss-ratio curves, by tests   │
    └────────────────┬───────────────────┘      └────────────────────────────────┘
-                    │ the type over its share
+                    │ both types, pressed toward the split
                     ▼
           shrink_folio_list ── anon ──► kcompressd (per node): write, finish reclaim
 ```
@@ -148,6 +148,8 @@ A sample of about 15,000 pages, chosen by block so that readahead runs stay whol
 - **W's share**: two caches with W 10% of the type's pages smaller and larger, moved by a sequential test of the gradient;
 - **the split**: each type's miss-ratio curve at 1/10 to 10/10 of memory, read from one order of the sample's pages, with readahead simulated at each point. The split that loses least — each type's misses weighed by what its refaults cost — is anon's share, moved only when another is better by two standard deviations.
 
+Reclaim presses both types toward the split rather than taking only from the type over it: a page of each type is pressed by how far its type is over its share, as a swappiness held within 1–199, like one an administrator sets. No type is ever left alone, and a type that will not give — anonymous memory in use — keeps its pages while the other gives in its place.
+
 Pages that are mapped and sampled are made `PROT_NONE`, as NUMA balancing does, so that every read of them faults and is seen (while NUMA balancing is off).
 
 ### Reads of mapped pages
@@ -156,7 +158,11 @@ A read of a mapped page leaves only the PTE's young bit. Once a tick the walker 
 
 ### Swappiness: measured, not guessed
 
-Each refault a task waits for is a sample: an anon major fault's swap-in, or a file fault or `read()` that waited for a page that came back with its history. Per type, CAST keeps the waits' sum and number, forgetting both by half once there have been as many as the LRUs hold pages:
+Each refault a task waits for is a sample: an anon major fault's swap-in, or a file fault or `read()` that waited for a page that came back with its history.
+
+A wait is timed as the device's work on it, not from asking to having: a page that queued behind others is not charged for their time. The waits of a type in flight together are a burst, and each is the time from the end before it to its own; the first to end is timed from the burst's start. The clock is read at a burst's start, at its last end and every 16 ends between, the ends since the last reading sharing the time alike, so that a storm of fast swap-ins costs no more for being timed.
+
+Per type, CAST keeps the waits' sum and number, forgetting both by half once there have been as many as the LRUs hold pages:
 
 ```
 cost = (prior + sum of waits) / (1 + waits)
@@ -170,6 +176,7 @@ What this amounts to is shown, as the swappiness it equals, in `/sys/kernel/mm/l
 share 100/1000
 swappiness 99
 cost anon 15183 ns (4582 waits) file 15180 ns (0 waits)
+in flight anon 0 file 0
 ```
 
 Three values of `vm.swappiness` are promises, kept outside the measurement:
@@ -204,14 +211,14 @@ Under `/sys/kernel/mm/lru_cast/`. **None needs setting**: the defaults are the d
 | :--- | :--- | :--- |
 | `version` | — | the release |
 | `enabled` | `1` | switch CAST off and on at run time; switching it on while MGLRU is on is refused (`EBUSY`) |
-| `estimate` | — | anon's share of memory, the swappiness the measured costs amount to, and the costs |
+| `estimate` | — | anon's share of memory, the swappiness the measured costs amount to, the costs, and the waits in flight |
 | `tune` | — | the controllers: per type the decay and W's share, and each simulated cache's misses |
 | `decay_auto` | `1` | the controllers set the decay and W's share; `0` leaves them as set by hand |
 | `decay` | measured | the decay per type, 0–14 (half-life C·2^(8−le) pages taken in; 0 = none). Writing stops `decay_auto` |
 | `w_permille` | measured | W's share per type, ‰ of its pages. Writing stops `decay_auto` |
 | `clean_min_ratio` | `10` | the clean-file floor, % of a node's memory; `0` = none |
 | `floor_held` | — | reclaim passes the floor held |
-| `balance` | — | reclaim calls that took anon, file, nothing, or both by size (the last pass before OOM) |
+| `balance` | — | reclaim calls that took anon, file, nothing, both by size (the last pass before OOM), or both pressed toward the split |
 | `clock` | — | per node: pages taken in, pages evicted, the tick |
 | `sweep` | — | the sweeps' counts: frames and words read, candidates taken and stale |
 | `walker` | `1` | the walker reads young bits of mapped pages |
@@ -239,15 +246,15 @@ Patches for each supported kernel are in [`patches/`](patches/):
 
 | Kernel | Patch |
 | :--- | :--- |
-| 6.12.74 | `0001-6.12.74-lru_cast-0.1.1.patch` |
-| 6.16.12 | `0001-6.16.12-lru_cast-0.1.1.patch` |
-| 6.18.22 | `0001-6.18.22-lru_cast-0.1.1.patch` |
-| 7.2-rc1 | `0001-7.2-rc1-lru_cast-0.1.1.patch` |
-| 7.3-rc7 | `0001-7.3-rc7-lru_cast-0.1.1.patch` |
+| 6.12.74 | `0001-6.12.74-lru_cast-v0.2.0.patch` |
+| 6.16.12 | `0001-6.16.12-lru_cast-v0.2.0.patch` |
+| 6.18.22 | `0001-6.18.22-lru_cast-v0.2.0.patch` |
+| 7.2-rc1 | `0001-7.2-rc1-lru_cast-v0.2.0.patch` |
+| 7.3-rc7 | `0001-7.3-rc7-lru_cast-v0.2.0.patch` |
 
 ```
 cd /path/to/linux
-patch -p1 < 6.12.74-lru_cast-0.1.1.patch
+patch -p1 < 0001-6.12.74-lru_cast-v0.2.0.patch
 scripts/config -e LRU_CAST
 make olddefconfig
 make -j$(nproc)
@@ -259,8 +266,8 @@ After boot:
 
 ```
 cat /sys/kernel/mm/lru_cast/enabled     # 1
-cat /sys/kernel/mm/lru_cast/version     # 0.1.1
-dmesg | grep lru_cast                   # lru_cast v0.1.1 by Masahito Suzuki
+cat /sys/kernel/mm/lru_cast/version     # 0.2.0
+dmesg | grep lru_cast                   # lru_cast v0.2.0 by Masahito Suzuki
 ```
 
 ### With MGLRU
