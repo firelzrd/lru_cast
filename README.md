@@ -127,6 +127,8 @@ Every page frame has one 32-bit word in a flat array indexed by its PFN — no l
 
 The tick is 8 bits and wraps, so a word not read for 192 ticks is marked stale by a sweep over the words: it keeps the tick of its read in units of 64 ticks, its key stays fixed and the page keeps ageing as any other. Before that unit could wrap — some 16 000 ticks on — the word is marked deep, older than any, and keeps only its count.
 
+When a page is evicted its history goes with it into the shadow entry it leaves: the word less its owner tag, 22 bits, with a 16-bit tick, its node and whether it was in the working set. A page that comes back with its history takes up where it was. An anon shadow is kept in the swap table, which since 7.1 keeps the slot's swap count and zero flag in the top bits of the same word; the shadow stays below them.
+
 ### The clock and the key
 
 Time is not wall time but pressure: the clock counts the pages the node takes in, less those their owners free, and ticks every quarter of what memory holds. While nothing comes in, nothing ages.
@@ -152,7 +154,7 @@ A sample of about 15,000 pages, chosen by block so that readahead runs stay whol
 
 - **the decay**: nine caches at the current half-life and ±1, 2, 4 and 8 steps from it, from le 1 — a half-life of 128 times memory, close to LFU yet still ageing — to le 14. One that misses less by two standard deviations (a sign test on the accesses where they disagree) becomes the new centre. There is no le 0: with no decay a key is the read count alone, pages read 255 times or more tie, and a set read often once stays however long it is not;
 - **W's share**: two caches with W 10% of the type's pages smaller and larger, moved by a sequential test of the gradient, each step taken on evidence gathered since the last;
-- **the split**: each type's miss-ratio curve at 1/10 to 10/10 of memory, read from one order of the sample's pages, with readahead simulated at each point. The split that loses least — each type's misses weighed by what its refaults cost — is anon's share, moved only when another is better by two standard deviations.
+- **the split**: each type's miss-ratio curve at 1/10 to 10/10 of memory, read from one order of the sample's pages, with readahead simulated at each point. The split that loses least — each type's misses weighed by what its refaults cost — is anon's share, moved only when another is better by two standard deviations. The two types' curves are counted over one time: the last cache's worth of what memory took in, both forgetting together on the clock. A count over the last cache of each type's own accesses would weigh anon, read a hundred times as often as file, over a hundredth of the time — as if a hundredth as many of its misses — and give its memory away while it is in use.
 
 Reclaim presses both types toward the split rather than taking only from the type over it: a page of each type is pressed by how far its type is over its share, as a swappiness held within 1–199, like one an administrator sets. No type is ever left alone, and a type that will not give — anonymous memory in use — keeps its pages while the other gives in its place.
 
@@ -263,15 +265,15 @@ Patches for each supported kernel are in [`patches/`](patches/):
 
 | Kernel | Patch |
 | :--- | :--- |
-| 6.12.74 | `0001-6.12.74-lru_cast-v0.2.7.patch` |
-| 6.16.12 | `0001-6.16.12-lru_cast-v0.2.7.patch` |
-| 6.18.22 | `0001-6.18.22-lru_cast-v0.2.7.patch` |
-| 7.2.13 | `0001-7.2.13-lru_cast-v0.2.7.patch` |
-| 7.3-rc7 | `0001-7.3-rc7-lru_cast-v0.2.7.patch` |
+| 6.12.74 | `0001-6.12.74-lru_cast-v0.2.8.patch` |
+| 6.16.12 | `0001-6.16.12-lru_cast-v0.2.8.patch` |
+| 6.18.22 | `0001-6.18.22-lru_cast-v0.2.8.patch` |
+| 7.2.13 | `0001-7.2.13-lru_cast-v0.2.8.patch` |
+| 7.3-rc7 | `0001-7.3-rc7-lru_cast-v0.2.8.patch` |
 
 ```
 cd /path/to/linux
-patch -p1 < 0001-6.12.74-lru_cast-v0.2.7.patch
+patch -p1 < 0001-6.12.74-lru_cast-v0.2.8.patch
 scripts/config -e LRU_CAST
 make olddefconfig
 make -j$(nproc)
@@ -283,8 +285,8 @@ After boot:
 
 ```
 cat /sys/kernel/mm/lru_cast/enabled     # 1
-cat /sys/kernel/mm/lru_cast/version     # 0.2.7
-dmesg | grep lru_cast                   # lru_cast v0.2.7 by Masahito Suzuki
+cat /sys/kernel/mm/lru_cast/version     # 0.2.8
+dmesg | grep lru_cast                   # lru_cast v0.2.8 by Masahito Suzuki
 ```
 
 ### With MGLRU
@@ -318,7 +320,7 @@ Each switch passes through the legacy LRU's lists, as MGLRU's own switch always 
 
 - `page->flags` is a `memdesc_flags_t`; `system_dfl_wq` is the unbound workqueue: **6.18**
 - `lazy_mmu_mode_enable/disable()` replace `arch_enter/leave_lazy_mmu_mode()`; `vmap_pages_range_noflush()` takes a gfp mask: **7.0**
-- an LRU folio's `memcg_data` points to its `obj_cgroup`, and an offline memcg's lists are spliced onto its parent's; the young-bit clears with notifier are `test_and_clear_young_ptes_notify()` and `pmdp_test_and_clear_young_notify()`; `lruvec_unlock_irq()`: **7.1**
+- an LRU folio's `memcg_data` points to its `obj_cgroup`, and an offline memcg's lists are spliced onto its parent's; the young-bit clears with notifier are `test_and_clear_young_ptes_notify()` and `pmdp_test_and_clear_young_notify()`; `lruvec_unlock_irq()`; the swap table keeps a slot's count and zero flag in the top bits of the word that holds its shadow: **7.1**
 - `workingset_age_nonresident()` and `vm_swappiness` are declared in `mm/`'s private headers; the scan balance reads its costs from counters (`lru_note_cost_refault()` is gone); `vmap_pages_range_noflush()` is declared in `mm/vmalloc.h`: **7.3**
 
 ### Source layout
