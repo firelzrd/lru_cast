@@ -1,13 +1,13 @@
-From cb9547236c79a8c447c4755b259d119a73fbe7b9 Mon Sep 17 00:00:00 2001
+From 1155002ec797b449e977edbd3e1519d5f0e8fc62 Mon Sep 17 00:00:00 2001
 From: Masahito S <firelzrd@gmail.com>
-Date: Tue, 27 Oct 2026 07:29:46 +0900
-Subject: [PATCH] 6.18.22-lru_cast-v0.2.6
+Date: Wed, 28 Oct 2026 12:49:28 +0900
+Subject: [PATCH] 6.18.22-lru_cast-v0.2.7
 
 ---
  include/linux/lru_cast.h           | 459 +++++++++++++++++
  include/linux/mm_inline.h          |  14 +-
  include/linux/mm_types.h           |  21 +
- include/linux/mmzone.h             |  91 ++++
+ include/linux/mmzone.h             |  93 ++++
  include/linux/page-flags.h         |   7 +
  include/linux/sched.h              |   6 +
  include/trace/events/mmflags.h     |   9 +-
@@ -20,16 +20,16 @@ Subject: [PATCH] 6.18.22-lru_cast-v0.2.6
  mm/lru_cast/Makefile               |  30 ++
  mm/lru_cast/check-layers.sh        |  58 +++
  mm/lru_cast/compat/caps.h          |  66 +++
- mm/lru_cast/compat/kernel.h        | 183 +++++++
+ mm/lru_cast/compat/kernel.h        | 203 ++++++++
  mm/lru_cast/compat/vmap.h          |  27 +
- mm/lru_cast/control.c              | 208 ++++++++
+ mm/lru_cast/control.c              | 209 ++++++++
  mm/lru_cast/control.h              |  15 +
- mm/lru_cast/core/clock.c           | 129 +++++
- mm/lru_cast/core/core.h            | 100 ++++
- mm/lru_cast/core/key.c             | 167 +++++++
+ mm/lru_cast/core/clock.c           | 182 +++++++
+ mm/lru_cast/core/core.h            | 203 ++++++++
+ mm/lru_cast/core/key.c             | 207 ++++++++
  mm/lru_cast/core/prefetch.c        |  76 +++
  mm/lru_cast/core/prefetch.h        |  60 +++
- mm/lru_cast/core/state.c           | 240 +++++++++
+ mm/lru_cast/core/state.c           | 269 ++++++++++
  mm/lru_cast/core/store.c           | 197 ++++++++
  mm/lru_cast/core/store.h           |  25 +
  mm/lru_cast/hooks.c                |  28 ++
@@ -47,15 +47,15 @@ Subject: [PATCH] 6.18.22-lru_cast-v0.2.6
  mm/lru_cast/tune/evidence.c        |  89 ++++
  mm/lru_cast/tune/evidence.h        |  37 ++
  mm/lru_cast/tune/protect.c         | 213 ++++++++
- mm/lru_cast/tune/readahead.c       |  64 +++
+ mm/lru_cast/tune/readahead.c       |  66 +++
  mm/lru_cast/tune/sample.c          |  35 ++
- mm/lru_cast/tune/sample.h          |  24 +
+ mm/lru_cast/tune/sample.h          |  25 +
  mm/lru_cast/tune/shape.h           |  60 +++
  mm/lru_cast/tune/share.c           | 105 ++++
  mm/lru_cast/tune/share.h           |  12 +
- mm/lru_cast/tune/sim.c             | 644 ++++++++++++++++++++++++
+ mm/lru_cast/tune/sim.c             | 733 ++++++++++++++++++++++++++++
  mm/lru_cast/tune/sim.h             |  53 ++
- mm/lru_cast/tune/tune.c            | 338 +++++++++++++
+ mm/lru_cast/tune/tune.c            | 447 +++++++++++++++++
  mm/lru_cast/tune/tune.h            |  97 ++++
  mm/lru_cast/tune/world.c           |  56 +++
  mm/lru_cast/tune/world.h           |  15 +
@@ -86,7 +86,7 @@ Subject: [PATCH] 6.18.22-lru_cast-v0.2.6
  mm/swap.h                          |  19 +
  mm/vmscan.c                        | 293 ++++++++++-
  mm/workingset.c                    |  27 +
- 82 files changed, 8611 insertions(+), 21 deletions(-)
+ 82 files changed, 9060 insertions(+), 21 deletions(-)
  create mode 100644 include/linux/lru_cast.h
  create mode 100644 mm/lru_cast/Makefile
  create mode 100755 mm/lru_cast/check-layers.sh
@@ -702,7 +702,7 @@ index 8b1045c51e..12bf7dfc9d 100644
  	struct ma_state mas;
  };
 diff --git a/include/linux/mmzone.h b/include/linux/mmzone.h
-index 7fb7331c57..79dd2d01a3 100644
+index 7fb7331c57..57fa2a9861 100644
 --- a/include/linux/mmzone.h
 +++ b/include/linux/mmzone.h
 @@ -23,6 +23,8 @@
@@ -714,7 +714,7 @@ index 7fb7331c57..79dd2d01a3 100644
  #include <asm/page.h>
  
  /* Free memory management - zoned buddy allocator.  */
-@@ -666,6 +668,73 @@ static inline void lru_gen_soft_reclaim(struct mem_cgroup *memcg, int nid)
+@@ -666,6 +668,75 @@ static inline void lru_gen_soft_reclaim(struct mem_cgroup *memcg, int nid)
  
  #endif /* CONFIG_LRU_GEN */
  
@@ -782,13 +782,15 @@ index 7fb7331c57..79dd2d01a3 100644
 +	DECLARE_BITMAP(lids, LRU_CAST_LIDS);
 +	/* ... of those, the numbers of lruvecs whose folios went to another's lists */
 +	DECLARE_BITMAP(lids_moved, LRU_CAST_LIDS);
++	/* the PFN the marking of stale words reads next, and the tick it has read up to */
++	unsigned long		stale_pfn, stale_tick;
 +};
 +#endif
 +
  struct lruvec {
  	struct list_head		lists[NR_LRU_LISTS];
  	/* per lruvec lru_lock for memcg */
-@@ -691,6 +760,11 @@ struct lruvec {
+@@ -691,6 +762,11 @@ struct lruvec {
  	struct lru_gen_mm_state		mm_state;
  #endif
  #endif /* CONFIG_LRU_GEN */
@@ -800,7 +802,7 @@ index 7fb7331c57..79dd2d01a3 100644
  #ifdef CONFIG_MEMCG
  	struct pglist_data *pgdat;
  #endif
-@@ -1442,6 +1516,20 @@ typedef struct pglist_data {
+@@ -1442,6 +1518,20 @@ typedef struct pglist_data {
  
  	atomic_t kswapd_failures;	/* Number of 'reclaimed == 0' runs */
  
@@ -821,7 +823,7 @@ index 7fb7331c57..79dd2d01a3 100644
  #ifdef CONFIG_COMPACTION
  	int kcompactd_max_order;
  	enum zone_type kcompactd_highest_zoneidx;
-@@ -1510,6 +1598,9 @@ typedef struct pglist_data {
+@@ -1510,6 +1600,9 @@ typedef struct pglist_data {
  	/* lru_gen_folio list */
  	struct lru_gen_memcg memcg_lru;
  #endif
@@ -1274,10 +1276,10 @@ index 0000000000..2288a68ebf
 +#endif /* _MM_LRU_CAST_COMPAT_CAPS_H */
 diff --git a/mm/lru_cast/compat/kernel.h b/mm/lru_cast/compat/kernel.h
 new file mode 100644
-index 0000000000..c0cadbe86f
+index 0000000000..ab2fd86d7f
 --- /dev/null
 +++ b/mm/lru_cast/compat/kernel.h
-@@ -0,0 +1,183 @@
+@@ -0,0 +1,203 @@
 +/* SPDX-License-Identifier: GPL-2.0 */
 +/*
 + * The host kernel's API, as mm/lru_cast/ uses it. Each adapter picks its
@@ -1432,6 +1434,26 @@ index 0000000000..c0cadbe86f
 +#endif
 +}
 +
++/* @dwork run on the unbound system workqueue in @delay jiffies, or sooner if it was to */
++static inline bool lru_cast_queue_delayed_work(struct delayed_work *dwork, unsigned long delay)
++{
++#if LRU_CAST_CAP_SYSTEM_DFL_WQ
++	return queue_delayed_work(system_dfl_wq, dwork, delay);
++#else
++	return queue_delayed_work(system_unbound_wq, dwork, delay);
++#endif
++}
++
++/* ... in @delay jiffies, whenever it was to */
++static inline bool lru_cast_mod_delayed_work(struct delayed_work *dwork, unsigned long delay)
++{
++#if LRU_CAST_CAP_SYSTEM_DFL_WQ
++	return mod_delayed_work(system_dfl_wq, dwork, delay);
++#else
++	return mod_delayed_work(system_unbound_wq, dwork, delay);
++#endif
++}
++
 +/* the clock refault distances are read on: pages that left the inactive list */
 +static inline void lru_cast_age_nonresident(struct lruvec *lruvec, unsigned long nr_pages)
 +{
@@ -1496,10 +1518,10 @@ index 0000000000..ba34ea86e4
 +#endif /* _MM_LRU_CAST_COMPAT_VMAP_H */
 diff --git a/mm/lru_cast/control.c b/mm/lru_cast/control.c
 new file mode 100644
-index 0000000000..6112a6ce5b
+index 0000000000..5c72a04d1a
 --- /dev/null
 +++ b/mm/lru_cast/control.c
-@@ -0,0 +1,208 @@
+@@ -0,0 +1,209 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * CAST -- switching it on and off.
@@ -1696,6 +1718,7 @@ index 0000000000..6112a6ce5b
 +
 +static int __init lru_cast_init(void)
 +{
++	lru_cast_key_init();
 +	lru_cast_prefetch_init();
 +	if (lru_cast_active && (lru_cast_store_init() || lru_cast_tune_init())) {
 +		pr_warn(LRU_CAST_PROGNAME ": no memory to run on, off\n");
@@ -1731,10 +1754,10 @@ index 0000000000..c9c67ed18a
 +#endif /* _MM_LRU_CAST_CONTROL_H */
 diff --git a/mm/lru_cast/core/clock.c b/mm/lru_cast/core/clock.c
 new file mode 100644
-index 0000000000..6e22ab2993
+index 0000000000..47bcc1045c
 --- /dev/null
 +++ b/mm/lru_cast/core/clock.c
-@@ -0,0 +1,129 @@
+@@ -0,0 +1,182 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * CAST -- the clock.
@@ -1760,8 +1783,11 @@ index 0000000000..6e22ab2993
 + * Pages taken in and freed are counted per CPU and added to the node's
 + * count a batch at a time. Whoever paces itself by the clock (the walker,
 + * re-protection) is told of each batch by lru_cast_hook_installed(); the clock
-+ * does not know who.
++ * does not know who. At each tick a part of the node's state words is
++ * looked over, and those read last long ago are marked stale (core.h).
 + */
++#include <linux/ktime.h>
++#include <linux/memory_hotplug.h>
 +#include <linux/percpu.h>
 +#include <linux/sysfs.h>
 +#include "core/core.h"
@@ -1770,6 +1796,13 @@ index 0000000000..6e22ab2993
 +
 +/* every node's ticks, summed: the controllers' clock */
 +static atomic_long_t lru_cast_ticks;
++
++/* words marked stale, and the time it took */
++static atomic_long_t lru_cast_stale_marked;
++static atomic64_t lru_cast_stale_ns;
++
++static void lru_cast_stale_workfn(struct work_struct *work);
++static DECLARE_WORK(lru_cast_stale_work, lru_cast_stale_workfn);
 +
 +/* a CPU's pages taken in less those freed, not yet added to their node's count */
 +struct lru_cast_pending {
@@ -1800,7 +1833,48 @@ index 0000000000..6e22ab2993
 +	    try_cmpxchg(&c->next, &next, installed + max(size / 4, 1UL))) {
 +		WRITE_ONCE(c->tick, c->tick + 1);
 +		atomic_long_inc(&lru_cast_ticks);
++		lru_cast_queue_work(&lru_cast_stale_work);
 +	}
++}
++
++/*
++ * Each node's words, a part at each tick, marked stale or deep where their
++ * last read is old (core.h): 1/LRU_CAST_STALE_PASS of the node's PFNs for
++ * each tick it has gone on since, all of them at most, so that a word is
++ * read once in LRU_CAST_STALE_PASS ticks, a tick more for the part left at
++ * the end. Marked from LRU_CAST_STALE_AGE ticks on, it is marked well
++ * before its read is 256 ticks old; deep, before its unit wraps.
++ */
++static void lru_cast_stale_workfn(struct work_struct *work)
++{
++	u64 t0 = ktime_get_ns();
++	int nid;
++
++	BUILD_BUG_ON(LRU_CAST_STALE_UNIT <= LRU_CAST_STALE_PASS + 1);	/* a word seen in each unit */
++	if (!lru_cast_enabled())
++		return;
++	get_online_mems();
++	for_each_node_state(nid, N_MEMORY) {
++		struct pglist_data *pgdat = NODE_DATA(nid);
++		struct lru_cast_clock *c = &pgdat->lru_cast_clock;
++		unsigned long tick = READ_ONCE(c->tick);
++		unsigned long start = pgdat->node_start_pfn, end = pgdat_end_pfn(pgdat);
++		unsigned long part = DIV_ROUND_UP(end - start, LRU_CAST_STALE_PASS);
++		unsigned long n = min(tick - c->stale_tick, (unsigned long)LRU_CAST_STALE_PASS);
++
++		c->stale_tick = tick;
++		if (c->stale_pfn < start || c->stale_pfn >= end)
++			c->stale_pfn = start;
++		while (n--) {
++			unsigned long stop = min(end, c->stale_pfn + part);
++
++			atomic_long_add(lru_cast_mark_stale(c->stale_pfn, stop, tick),
++					&lru_cast_stale_marked);
++			c->stale_pfn = stop < end ? stop : start;
++		}
++	}
++	put_online_mems();
++	atomic64_add(ktime_get_ns() - t0, &lru_cast_stale_ns);
 +}
 +
 +/* @nr pages into node @nid, net, on this CPU's account */
@@ -1862,14 +1936,16 @@ index 0000000000..6e22ab2993
 +				     data_race(pgdat->lru_cast_clock.evict),
 +				     READ_ONCE(pgdat->lru_cast_clock.tick));
 +	}
-+	return len;
++	return len + sysfs_emit_at(buf, len, "stale marked %ld us %llu\n",
++				   atomic_long_read(&lru_cast_stale_marked),
++				   atomic64_read(&lru_cast_stale_ns) / 1000);
 +}
 diff --git a/mm/lru_cast/core/core.h b/mm/lru_cast/core/core.h
 new file mode 100644
-index 0000000000..d924d35f70
+index 0000000000..16120acc38
 --- /dev/null
 +++ b/mm/lru_cast/core/core.h
-@@ -0,0 +1,100 @@
+@@ -0,0 +1,203 @@
 +/* SPDX-License-Identifier: GPL-2.0 */
 +/*
 + * CAST -- the core: what a folio's reads were, and when.
@@ -1900,6 +1976,7 @@ index 0000000000..d924d35f70
 + * 8-10 and 11-13, the gaps back to the two reads before, a code each
 + * (lru_cast_gap_code()); 14-23, its owner tag; 24-31, its read count. What
 + * lru_cast_read() and the rest give is the word without the tag: the history.
++ * A word not read for long is marked stale (below).
 + */
 +#define LRU_CAST_W_GAP		8
 +#define LRU_CAST_W_OWNER		14
@@ -1918,11 +1995,106 @@ index 0000000000..d924d35f70
 +	return c > 1 ? c - 1 : 0;
 +}
 +
-+/* @old with a read at tick @t pushed in, its count @n; the tag kept */
++/*
++ * The age of a word's last read. A tick is 8 bits and wraps: the tick now
++ * less the one stamped is the age while it is under 256 ticks, and a word
++ * not read for longer would show its read as recent again. So the age has
++ * more rules, kept here and nowhere else -- lru_cast_age() and
++ * lru_cast_stale_last() are the only readings of a word's tick,
++ * lru_cast_push() and lru_cast_mark() the only writings of it:
++ *
++ *	stale	a word read last LRU_CAST_STALE_AGE ticks ago or more is
++ *		marked stale (lru_cast_mark(); clock.c looks over a part of
++ *		the words at each tick, each in LRU_CAST_STALE_PASS ticks, so
++ *		that it is marked well before 256). Its tick is then the
++ *		read's, in units of LRU_CAST_STALE_UNIT ticks and modulo
++ *		LRU_CAST_STALE_UNITS: the read is taken at the start of its
++ *		unit, as old as it is and growing older, until it is read
++ *		again; its count stays, its gaps go (the reads are taken as
++ *		all at the last).
++ *	deep	a stale word whose read is LRU_CAST_STALE_DEEP units old is
++ *		marked deep, before its unit could wrap: its read is older
++ *		than any a word tells, and only its count is kept. At the
++ *		steepest decay and the weakest alike it is then past decaying
++ *		(some 32 half-lives at the weakest).
++ *
++ * The mark is the gap codes 0 and 7 -- the read before the last within a
++ * tick of it, the one before that 128 or more ticks earlier -- which
++ * lru_cast_push() does not make: it codes that gap 6. A deep word's tick
++ * is LRU_CAST_STALE_DEEP_TICK, which no unit is.
++ */
++#define LRU_CAST_STALE_AGE	192
++#define LRU_CAST_STALE_PASS	32
++#define LRU_CAST_STALE_SHIFT	6
++#define LRU_CAST_STALE_UNIT	(1UL << LRU_CAST_STALE_SHIFT)	/* > LRU_CAST_STALE_PASS + 1 */
++#define LRU_CAST_STALE_UNITS	255
++#define LRU_CAST_STALE_DEEP	(LRU_CAST_STALE_UNITS - 2)
++#define LRU_CAST_STALE_DEEP_TICK	0xffU
++#define LRU_CAST_W_GAPS		(0x3fU << LRU_CAST_W_GAP)
++#define LRU_CAST_W_STALE	(7U << (LRU_CAST_W_GAP + 3))
++
++/* @w is marked stale, or deep */
++static inline bool lru_cast_stale(u32 w)
++{
++	return (w >> 24) && (w & LRU_CAST_W_GAPS) == LRU_CAST_W_STALE;
++}
++
++/* @w is marked deep */
++static inline bool lru_cast_deep(u32 w)
++{
++	return lru_cast_stale(w) && (w & 0xffU) == LRU_CAST_STALE_DEEP_TICK;
++}
++
++/* the ticks since @w's last read, the clock at @tick, 255 for any more; @w read at least once */
++static inline u8 lru_cast_age(u32 w, unsigned long tick)
++{
++	return lru_cast_stale(w) ? 255 : (u8)(tick - (w & 0xffU));
++}
++
++/* the units since the unit stamped in a stale word that is not deep */
++static inline unsigned long lru_cast_stale_units(u32 w, unsigned long tick)
++{
++	return ((tick >> LRU_CAST_STALE_SHIFT) % LRU_CAST_STALE_UNITS + LRU_CAST_STALE_UNITS -
++		(w & 0xffU)) % LRU_CAST_STALE_UNITS;
++}
++
++/* the tick a stale word not deep takes its read at: the start of its unit */
++static inline unsigned long lru_cast_stale_last(u32 w, unsigned long tick)
++{
++	unsigned long unit = (tick >> LRU_CAST_STALE_SHIFT) - lru_cast_stale_units(w, tick);
++
++	return unit << LRU_CAST_STALE_SHIFT;
++}
++
++/* @w marked stale, or deep, if its last read is old enough to be; else 0 */
++static inline u32 lru_cast_mark(u32 w, unsigned long tick)
++{
++	u8 age;
++
++	if (!(w >> 24) || lru_cast_deep(w))
++		return 0;
++	if (lru_cast_stale(w))
++		return lru_cast_stale_units(w, tick) >= LRU_CAST_STALE_DEEP ?
++		       w | LRU_CAST_STALE_DEEP_TICK : 0;
++	age = lru_cast_age(w, tick);
++	if (age < LRU_CAST_STALE_AGE)
++		return 0;
++	return (w & ~(LRU_CAST_W_GAPS | 0xffU)) | LRU_CAST_W_STALE |
++	       ((tick - age) >> LRU_CAST_STALE_SHIFT) % LRU_CAST_STALE_UNITS;
++}
++
++/*
++ * @old with a read at tick @t pushed in, its count @n; the tag kept. The
++ * gap back to the read before is its age; to the one before that, the gap
++ * it had -- of a stale word, as far back as a gap goes.
++ */
 +static inline u32 lru_cast_push(u32 old, u8 t, u32 n)
 +{
-+	u32 g1 = old >> 24 ? lru_cast_gap_code(t - (u8)old) : 0, g2 = (old >> LRU_CAST_W_GAP) & 7;
++	u32 g1 = old >> 24 ? lru_cast_gap_code(lru_cast_age(old, t)) : 0;
++	u32 g2 = lru_cast_stale(old) ? 7 : (old >> LRU_CAST_W_GAP) & 7;
 +
++	if (!g1 && g2 == 7)
++		g2 = 6;			/* not the stale mark */
 +	return (old & LRU_CAST_OWNER_MASK) | n << 24 | g2 << (LRU_CAST_W_GAP + 3) |
 +	       g1 << LRU_CAST_W_GAP | t;
 +}
@@ -1934,6 +2106,7 @@ index 0000000000..d924d35f70
 +unsigned long lru_cast_find_owners(unsigned long pfn, unsigned long end,
 +				   const unsigned long *lids, u32 *owner);
 +void lru_cast_write(struct folio *folio, u32 w);
++unsigned long lru_cast_mark_stale(unsigned long pfn, unsigned long end, unsigned long tick);
 +
 +/* clock.c */
 +void lru_cast_installed(struct folio *folio, unsigned long nr);
@@ -1957,8 +2130,14 @@ index 0000000000..d924d35f70
 + */
 +#define LRU_CAST_LE_MIN	1
 +#define LRU_CAST_LE_MAX	14			/* the steepest decay */
-+long lru_cast_key(u32 w, unsigned long tick, int le);
++void lru_cast_key_init(void);
 +long lru_cast_key_res(u32 w, unsigned long tick, int le, int res);
++
++/* quarter half-lives */
++static inline long lru_cast_key(u32 w, unsigned long tick, int le)
++{
++	return lru_cast_key_res(w, tick, le, 2);
++}
 +long lru_cast_window_lo(unsigned long tick, int le);
 +
 +/* implemented above the core (hooks.c) */
@@ -1972,10 +2151,10 @@ index 0000000000..d924d35f70
 +#endif /* _MM_LRU_CAST_CORE_H */
 diff --git a/mm/lru_cast/core/key.c b/mm/lru_cast/core/key.c
 new file mode 100644
-index 0000000000..a4a2778050
+index 0000000000..7e32f5d8df
 --- /dev/null
 +++ b/mm/lru_cast/core/key.c
-@@ -0,0 +1,167 @@
+@@ -0,0 +1,207 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * CAST -- the key of a state word.
@@ -2096,7 +2275,7 @@ index 0000000000..a4a2778050
 +}
 +
 +/* 256 log2(v / 2^16) */
-+static s64 lru_cast_log2q8(u64 v)
++static __always_inline s64 lru_cast_log2q8(u64 v)
 +{
 +	int msb = fls64(v) - 1;
 +	u32 m = (msb >= 8 ? v >> (msb - 8) : v << (8 - msb)) & 255;
@@ -2104,37 +2283,77 @@ index 0000000000..a4a2778050
 +	return ((s64)msb - 16) * 256 + lru_cast_log2m[m];
 +}
 +
++/*
++ * The weights of a word's reads at each decay, its gap codes read as an
++ * index: [0] the newest's, 1, [1 + g1] the one before's, [9 + 8 g1 + g2]
++ * the one before that's (lru_cast_key_res()). Set up once, at boot.
++ */
++#define LRU_CAST_WTAB		(1 + 8 + 64)
++
++static u32 lru_cast_wtab[LRU_CAST_LE_MAX + 1][LRU_CAST_WTAB] __read_mostly;
++
++void __init lru_cast_key_init(void)
++{
++	u32 g1, g2;
++	int le;
++
++	for (le = 1; le <= LRU_CAST_LE_MAX; le++) {
++		u32 *t = lru_cast_wtab[le];
++
++		t[0] = lru_cast_weight(0, le);
++		for (g1 = 0; g1 < 8; g1++) {
++			t[1 + g1] = lru_cast_weight(lru_cast_gap2(g1), le);
++			for (g2 = 0; g2 < 8; g2++)
++				t[9 + 8 * g1 + g2] =
++					lru_cast_weight(lru_cast_gap2(g1) + lru_cast_gap2(g2), le);
++		}
++	}
++}
++
 +/* the bucket of a state word: 2^-@res half-lives of the key, or n */
 +long lru_cast_key_res(u32 w, unsigned long tick, int le, int res)
 +{
-+	u32 n = w >> 24, m = min(n, 3u), j, rel = 0;
-+	u8 age0 = tick - (w & 0xff);
++	u32 n = w >> 24, g1 = (w >> LRU_CAST_W_GAP) & 7, g2 = (w >> (LRU_CAST_W_GAP + 3)) & 7;
++	u8 age0 = n ? lru_cast_age(w, tick) : 0;
 +	unsigned long last = tick >= age0 ? tick - age0 : 0;
-+	u64 s = 0, wt = 0;
++	const u32 *t;
++	u64 s, wt;
 +
 +	if (!le)
 +		return n;
 +	if (!n)
 +		return LONG_MIN;
 +	/*
++	 * Stale (core.h), the reads all at the last, taken at the start of its
++	 * unit: as fixed as any other key. Deep, older than any: the count alone.
++	 */
++	if (lru_cast_stale(w)) {
++		s64 lift = lru_cast_log2q8((u64)n << 16);
++
++		if (lru_cast_deep(w))
++			return lift >> (8 - res);
++		last = lru_cast_stale_last(w, tick);
++		return ((s64)((last * lru_cast_dq(le)) >> 8) + lift) >> (8 - res);
++	}
++	/*
 +	 * The key is the same taken at any time; taken at the last read, its
 +	 * weight is 1 and the sum cannot underflow however long ago that was.
++	 * The reads before it are the middles of the gaps their codes allow
++	 * (lru_cast_gap2()), their weights looked up.
 +	 */
-+	for (j = 0; j < m; j++) {
-+		if (j)		/* the middle of the gap its code allows, in half ticks */
-+			rel += lru_cast_gap2((w >> (LRU_CAST_W_GAP + 3 * (j - 1))) & 7);
-+		wt = lru_cast_weight(rel, le);
++	t = lru_cast_wtab[min(le, LRU_CAST_LE_MAX)];
++	s = wt = t[0];
++	if (n >= 2) {
++		wt = t[1 + g1];
++		s += wt;
++	}
++	if (n >= 3) {
++		wt = t[9 + 8 * g1 + g2];
 +		s += wt;
 +	}
 +	if (n > 3)
 +		s += (u64)(n - 3) * wt;		/* older reads count at the oldest stamp */
 +	return ((s64)((last * lru_cast_dq(le)) >> 8) + lru_cast_log2q8(s)) >> (8 - res);
-+}
-+
-+/* quarter half-lives */
-+long lru_cast_key(u32 w, unsigned long tick, int le)
-+{
-+	return lru_cast_key_res(w, tick, le, 2);
 +}
 +
 +long lru_cast_window_lo(unsigned long tick, int le)
@@ -2293,10 +2512,10 @@ index 0000000000..a3c067a782
 +#endif /* _MM_LRU_CAST_CORE_PREFETCH_H */
 diff --git a/mm/lru_cast/core/state.c b/mm/lru_cast/core/state.c
 new file mode 100644
-index 0000000000..6ce5526384
+index 0000000000..d33df9d120
 --- /dev/null
 +++ b/mm/lru_cast/core/state.c
-@@ -0,0 +1,240 @@
+@@ -0,0 +1,269 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * CAST -- the per-folio state word.
@@ -2404,6 +2623,35 @@ index 0000000000..6ce5526384
 +		}
 +	}
 +	return end;
++}
++
++/*
++ * The words of [@pfn, @end) old enough at @tick marked stale
++ * (lru_cast_mark()), lock-free: one read meanwhile is left as it is. How
++ * many were marked. It may sleep, a section of words at a time: run by a
++ * worker, it gives way where the kernel is not preemptible.
++ */
++unsigned long lru_cast_mark_stale(unsigned long pfn, unsigned long end, unsigned long tick)
++{
++	unsigned long marked = 0;
++
++	while (pfn < end) {
++		unsigned long sec_end = min(end, section_nr_to_pfn(pfn_to_section_nr(pfn) + 1));
++		u32 *p = lru_cast_word(pfn);
++
++		if (!p) {
++			pfn = sec_end;
++			continue;
++		}
++		for (; pfn < sec_end; pfn++, p++) {
++			u32 v = READ_ONCE(*p), m = lru_cast_mark(v, tick);
++
++			if (m && try_cmpxchg(p, &v, m))
++				marked++;
++		}
++		cond_resched();
++	}
++	return marked;
 +}
 +
 +/* @folio's history made @w; its tag kept */
@@ -5626,10 +5874,10 @@ index 0000000000..5d51f90831
 +}
 diff --git a/mm/lru_cast/tune/readahead.c b/mm/lru_cast/tune/readahead.c
 new file mode 100644
-index 0000000000..c504ffeaca
+index 0000000000..fb5908469c
 --- /dev/null
 +++ b/mm/lru_cast/tune/readahead.c
-@@ -0,0 +1,64 @@
+@@ -0,0 +1,66 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * CAST -- readahead, as each point of the curve would have it.
@@ -5679,19 +5927,21 @@ index 0000000000..c504ffeaca
 +
 +/*
 + * Which of the curve's points (bit p: p tenths; 0 misses all) wait for the
-+ * read of @folio, given those that miss it -- a miss in an open window
-+ * does not -- and the windows after it. The run before a block is out of
-+ * sight: a read at its start begins one, as a read of a file's start does.
++ * read of the @nr pages at @index of @block, given those that miss it -- a
++ * miss in an open window does not -- and the windows after it. The run
++ * before a block is out of sight: a read at its start begins one, as a
++ * read of a file's start does.
 + */
-+u16 lru_cast_tune_ra_waits(struct lru_cast_tune_ra *ra, struct folio *folio, u64 block, u16 miss)
++u16 lru_cast_tune_ra_waits(struct lru_cast_tune_ra *ra, u64 block, pgoff_t index,
++			   unsigned int nr, u16 miss)
 +{
 +	struct lru_cast_tune_blk *b = &ra->blk[hash_64(block, ilog2(LRU_CAST_TUNE_BLKS))];
-+	bool run = b->id == block && b->next == folio->index;
++	bool run = b->id == block && b->next == index;
 +	u16 wait = run ? miss & ~b->win : miss;
 +
 +	b->id = block;
-+	b->win = run ? b->win | miss : folio->index % LRU_CAST_TUNE_BLOCK ? 0 : miss;
-+	b->next = folio->index + folio_nr_pages(folio);
++	b->win = run ? b->win | miss : index % LRU_CAST_TUNE_BLOCK ? 0 : miss;
++	b->next = index + nr;
 +	return wait;
 +}
 diff --git a/mm/lru_cast/tune/sample.c b/mm/lru_cast/tune/sample.c
@@ -5737,10 +5987,10 @@ index 0000000000..ab1a0cad59
 +}
 diff --git a/mm/lru_cast/tune/sample.h b/mm/lru_cast/tune/sample.h
 new file mode 100644
-index 0000000000..c0d3dcd5d2
+index 0000000000..ba3cf220d4
 --- /dev/null
 +++ b/mm/lru_cast/tune/sample.h
-@@ -0,0 +1,24 @@
+@@ -0,0 +1,25 @@
 +/* SPDX-License-Identifier: GPL-2.0 */
 +/*
 + * CAST -- which pages the controllers sample (sample.c), and how
@@ -5762,7 +6012,8 @@ index 0000000000..c0d3dcd5d2
 +struct lru_cast_tune_ra *lru_cast_tune_ra_alloc(void);
 +void lru_cast_tune_ra_free(struct lru_cast_tune_ra *ra);
 +void lru_cast_tune_ra_init(struct lru_cast_tune_ra *ra);
-+u16 lru_cast_tune_ra_waits(struct lru_cast_tune_ra *ra, struct folio *folio, u64 block, u16 miss);
++u16 lru_cast_tune_ra_waits(struct lru_cast_tune_ra *ra, u64 block, pgoff_t index,
++			   unsigned int nr, u16 miss);
 +
 +#endif /* _MM_LRU_CAST_TUNE_SAMPLE_H */
 diff --git a/mm/lru_cast/tune/shape.h b/mm/lru_cast/tune/shape.h
@@ -5962,10 +6213,10 @@ index 0000000000..ed70aed9e1
 +#endif /* _MM_LRU_CAST_TUNE_SHARE_H */
 diff --git a/mm/lru_cast/tune/sim.c b/mm/lru_cast/tune/sim.c
 new file mode 100644
-index 0000000000..9610402d94
+index 0000000000..860d515971
 --- /dev/null
 +++ b/mm/lru_cast/tune/sim.c
-@@ -0,0 +1,644 @@
+@@ -0,0 +1,733 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * CAST -- simulated CAST caches of a sample, and its order.
@@ -6004,6 +6255,12 @@ index 0000000000..9610402d94
 + * sentinels, so a slot leaves one without knowing which. With the table
 + * full, a new page takes the slot of the lowest page in the order resident
 + * in no cache: the one every size would have let go first.
++ *
++ * A page not read for long is marked stale, then deep, as the main cache's
++ * words are (core/core.h): a part of the slots at each tick, each in
++ * LRU_CAST_STALE_PASS ticks. Its key then changes once, at the mark, and
++ * is as fixed as any other: the page moves in each cache it is in M of
++ * and in the order, as a read would move it.
 + */
 +#include <linux/hash.h>
 +#include <linux/rbtree_augmented.h>
@@ -6047,6 +6304,13 @@ index 0000000000..9610402d94
 +	int ole;			/* the order's decay */
 +	unsigned int tracked;		/* slots in it */
 +	u64 seq;			/* reads */
++	/* the keys of the slot being read, at the decays asked so far (lru_cast_tune_skey()) */
++	u16 kslot;
++	u16 khave;
++	long kkey[LRU_CAST_LE_MAX + 1];
++	unsigned long stale_tick;	/* the tick the marking has looked up to */
++	unsigned int stale_slot;	/* the slot it looks at next */
++	unsigned int stale_todo;	/* ... and how many it has yet to */
 +};
 +
 +static inline u16 lru_cast_tune_head(struct lru_cast_tune_sim *sim, int m, unsigned int idx)
@@ -6059,11 +6323,25 @@ index 0000000000..9610402d94
 +	return lru_cast_tune_head(sim, m, LRU_CAST_TUNE_BUCKETS);
 +}
 +
-+/* the key of @w at decay @le in buckets: its key's, then which of them (see above) */
++/*
++ * the key of @w at decay @le in buckets: its key's, then which of them (see
++ * above). Of the slot being read, each decay's once: the caches of one
++ * decay agree.
++ */
 +static long lru_cast_tune_skey(struct lru_cast_tune_sim *sim, u16 s, int le)
 +{
 +	u32 w = sim->slot[s].w;
-+	long key = lru_cast_key(w, sim->tick, le);
++	long key;
++
++	if (s != sim->kslot) {
++		key = lru_cast_key(w, sim->tick, le);
++	} else if (sim->khave & BIT(le)) {
++		key = sim->kkey[le];
++	} else {
++		key = lru_cast_key(w, sim->tick, le);
++		sim->kkey[le] = key;
++		sim->khave |= BIT(le);
++	}
 +
 +	if (key == LONG_MIN)
 +		return LONG_MIN;
@@ -6352,6 +6630,8 @@ index 0000000000..9610402d94
 +{
 +	int m;
 +
++	sim->kslot = s;			/* its word stays as it is meanwhile */
++	sim->khave = 0;
 +	for (m = 0; m < LRU_CAST_TUNE_SIM; m++) {
 +		lru_cast_tune_access(sim, m, s, res & BIT(m));
 +		lru_cast_tune_balance(sim, m);
@@ -6359,6 +6639,7 @@ index 0000000000..9610402d94
 +	if (!RB_EMPTY_NODE(&sim->slot[s].rb))
 +		lru_cast_tune_oerase(sim, s);
 +	lru_cast_tune_oinsert(sim, s, ++sim->seq);
++	sim->kslot = LRU_CAST_TUNE_SIM_NONE;
 +}
 +
 +/* @s's rank in the order, 1 the top, before its read reaches it; 0: not in it */
@@ -6437,6 +6718,58 @@ index 0000000000..9610402d94
 +}
 +
 +/*
++ * What the marking does in a read, and in one when it is a pass behind: a
++ * slot looked at costs 1, one marked, moved in every cache and the order,
++ * LRU_CAST_TUNE_MARK_MOVE
++ */
++#define LRU_CAST_TUNE_MARK_STEP		64
++#define LRU_CAST_TUNE_MARK_CATCHUP	256
++#define LRU_CAST_TUNE_MARK_MOVE		16
++
++/*
++ * The slots marked stale or deep where their read is old, as the main
++ * cache's words are (core/clock.c), each moved by its new key in the caches
++ * it is in M of and in the order. Each tick owes a part of the table, a
++ * pass in LRU_CAST_STALE_PASS ticks; the reads pay it, a little each --
++ * slots read at one time go stale at one time, and a few are moved in a
++ * read -- and more each only while a whole pass is owed.
++ */
++static void lru_cast_tune_mark(struct lru_cast_tune_sim *sim)
++{
++	unsigned int part = DIV_ROUND_UP(sim->nslots, LRU_CAST_STALE_PASS), s;
++	unsigned long ticks = min(sim->tick - sim->stale_tick, (unsigned long)LRU_CAST_STALE_PASS);
++	int budget;
++
++	sim->stale_tick = sim->tick;
++	sim->stale_todo = min_t(unsigned long, sim->stale_todo + ticks * part, 2 * sim->nslots);
++	budget = sim->stale_todo > sim->nslots ? LRU_CAST_TUNE_MARK_CATCHUP : LRU_CAST_TUNE_MARK_STEP;
++	for (s = sim->stale_slot; sim->stale_todo && budget > 0;
++	     s = s + 1 < sim->nslots ? s + 1 : 0) {
++		struct lru_cast_tune_slot *sl = &sim->slot[s];
++		u32 w = sl->id ? lru_cast_mark(sl->w, sim->tick) : 0;
++		int m;
++
++		sim->stale_todo--;
++		budget--;
++		if (!w)
++			continue;
++		budget -= LRU_CAST_TUNE_MARK_MOVE;
++		sl->w = w;
++		for (m = 0; m < LRU_CAST_TUNE_SIM; m++) {
++			if ((sl->res & ~sl->inw) & BIT(m)) {
++				lru_cast_tune_unlink(sim, s, m);
++				lru_cast_tune_place(sim, m, s, lru_cast_tune_mkey(sim, m, s));
++			}
++		}
++		if (!RB_EMPTY_NODE(&sl->rb)) {
++			lru_cast_tune_oerase(sim, s);
++			lru_cast_tune_oinsert(sim, s, sl->seq);
++		}
++	}
++	sim->stale_slot = s;
++}
++
++/*
 + * A read of page @id at @tick, the nodes' clock: its slot, given one if it
 + * has none (LRU_CAST_TUNE_SIM_NONE: no room), and the read in its state word. @res:
 + * the caches it is resident in, before the read reaches them, and its rank
@@ -6448,6 +6781,8 @@ index 0000000000..9610402d94
 +	u32 old, n;
 +
 +	sim->tick = tick;
++	if (sim->stale_todo || tick != sim->stale_tick)
++		lru_cast_tune_mark(sim);
 +	if (s == LRU_CAST_TUNE_SIM_NONE)
 +		s = lru_cast_tune_alloc(sim, id);
 +	if (s == LRU_CAST_TUNE_SIM_NONE)
@@ -6560,6 +6895,7 @@ index 0000000000..9610402d94
 +	struct lru_cast_tune_sim *sim;
 +
 +	BUILD_BUG_ON(LRU_CAST_TUNE_SIM > 16);		/* res and inw are bitmasks */
++	BUILD_BUG_ON(LRU_CAST_LE_MAX >= 16);		/* khave is a bitmask */
 +	if (WARN_ON_ONCE(nslots > lru_cast_tune_sim_max_slots()))
 +		return NULL;
 +	sim = kvmalloc(sizeof(*sim), LRU_CAST_TUNE_GFP);
@@ -6595,6 +6931,7 @@ index 0000000000..9610402d94
 +	memset(sim->hash, 0xff, (1U << sim->hbits) * sizeof(*sim->hash));
 +	memset(sim->c, 0, sizeof(sim->c));
 +	sim->free = LRU_CAST_TUNE_SIM_NONE;
++	sim->kslot = LRU_CAST_TUNE_SIM_NONE;
 +	for (s = sim->nslots; s-- > 0;) {
 +		sim->slot[s].hnext = sim->free;
 +		sim->free = s;
@@ -6604,6 +6941,9 @@ index 0000000000..9610402d94
 +	sim->ole = -1;
 +	sim->tracked = 0;
 +	sim->seq = 0;
++	sim->stale_tick = tick;
++	sim->stale_slot = 0;
++	sim->stale_todo = 0;
 +	for (m = 0; m < LRU_CAST_TUNE_SIM; m++) {
 +		sim->c[m].cap = 256;
 +		src[m] = m;
@@ -6671,10 +7011,10 @@ index 0000000000..4aef61e831
 +#endif /* _MM_LRU_CAST_TUNE_SIM_H */
 diff --git a/mm/lru_cast/tune/tune.c b/mm/lru_cast/tune/tune.c
 new file mode 100644
-index 0000000000..d8f4785a99
+index 0000000000..3f158b057d
 --- /dev/null
 +++ b/mm/lru_cast/tune/tune.c
-@@ -0,0 +1,338 @@
+@@ -0,0 +1,447 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * CAST -- the controllers: the decay, W's share, and anon's share
@@ -6703,11 +7043,14 @@ index 0000000000..d8f4785a99
 + * pages' state words with the main cache, and its clock -- the nodes'
 + * ticks, so that le means the same half-life here as there.
 + *
-+ * All under one lock, taken only for sampled pages: a world holds of each
-+ * type what the other leaves. With the controllers off
++ * A read is not taken in where it happens: it is queued on its CPU and a
++ * worker takes the queues in, every few milliseconds or sooner, all under
++ * one lock -- a world holds of each type what the other leaves -- that no
++ * reader waits for. With the controllers off
 + * (lru_cast_tune_set_auto()) nothing is sampled: the numbers are set by hand.
 + */
 +#include <linux/sysfs.h>
++#include <linux/percpu.h>
 +#include "tune/tune.h"
 +#include "tune/sim.h"
 +#include "tune/world.h"
@@ -6731,7 +7074,7 @@ index 0000000000..d8f4785a99
 +};
 +
 +static struct lru_cast_tune_type *lru_cast_tune_types[ANON_AND_FILE];
-+static DEFINE_SPINLOCK(lru_cast_tune_lock);
++static DEFINE_MUTEX(lru_cast_tune_lock);
 +static unsigned int lru_cast_tune_nslots;		/* slots per type */
 +
 +unsigned int lru_cast_tune_on __read_mostly = 1;
@@ -6786,32 +7129,56 @@ index 0000000000..d8f4785a99
 +
 +/* ---------------------------------------------------------------- reads */
 +
-+/* a read of @folio, whose block @block is in the sample (lru_cast_tune_read()) */
-+void lru_cast_tune_event(struct folio *folio, u64 block)
++/*
++ * A read of a sampled page, as the caches take it: queued where it
++ * happened, taken in order of each CPU's queue, a queue at a time.
++ */
++struct lru_cast_tune_rec {
++	u64 id, block;
++	pgoff_t index;
++	unsigned long tick;		/* the nodes' clock when it was read */
++	unsigned int nr;
++	int type;
++};
++
++/*
++ * Each CPU's reads, until the worker takes them in (lru_cast_tune_drain()):
++ * a reader takes only its own CPU's lock, and the worker each one's for as
++ * long as it copies the queue out. Half full, the worker is called at
++ * once; otherwise the first read waits LRU_CAST_TUNE_DRAIN_DELAY at most.
++ * Full -- the worker behind -- a read is dropped: the caches see fewer
++ * reads when they cost more than a CPU.
++ */
++#define LRU_CAST_TUNE_QUEUE		256
++#define LRU_CAST_TUNE_DRAIN_DELAY	max(HZ / 100, 1)
++
++struct lru_cast_tune_queue {
++	spinlock_t lock;
++	unsigned int n;
++	struct lru_cast_tune_rec rec[LRU_CAST_TUNE_QUEUE];
++};
++
++static struct lru_cast_tune_queue __percpu *lru_cast_tune_queues;
++static struct lru_cast_tune_rec lru_cast_tune_taken[LRU_CAST_TUNE_QUEUE];	/* the worker's */
++static atomic_long_t lru_cast_tune_dropped;
++
++static void lru_cast_tune_drain(struct work_struct *work);
++static DECLARE_DELAYED_WORK(lru_cast_tune_drain_work, lru_cast_tune_drain);
++
++/* the read @r, taken in by the caches of its type */
++static void lru_cast_tune_take(struct lru_cast_tune_type *t, const struct lru_cast_tune_rec *r)
 +{
-+	int type = folio_is_file_lru(folio), m;
++	int type = t->type, m;
 +	unsigned int rank, read[ANON_AND_FILE];
-+	struct lru_cast_tune_type *t;
-+	unsigned long flags;
-+	u64 id;
 +	u16 s, miss = 1, wait;
 +	bool full, hit[LRU_CAST_TUNE_N];
 +	u32 res;
 +
-+	if (!READ_ONCE(lru_cast_tune_types[type]))
-+		return;
-+	id = lru_cast_tune_sample_page(folio);
-+
-+	spin_lock_irqsave(&lru_cast_tune_lock, flags);
-+	t = lru_cast_tune_types[type];		/* replaced under the lock (lru_cast_tune_init()) */
-+	if (!t) {
-+		spin_unlock_irqrestore(&lru_cast_tune_lock, flags);
-+		return;
-+	}
-+	t->tick = lru_cast_ticks_now();
-+	s = lru_cast_tune_sim_read(t->sim, id, t->tick, &res);
++	/* the queues are taken one by one: a CPU's reads can be behind another's */
++	t->tick = max(t->tick, r->tick);
++	s = lru_cast_tune_sim_read(t->sim, r->id, t->tick, &res);
 +	if (s == LRU_CAST_TUNE_SIM_NONE)
-+		goto out;
++		return;
 +	for (m = 0; m < LRU_CAST_TUNE_SIM; m++)
 +		hit[m] = res & BIT(m);
 +	/*
@@ -6829,7 +7196,7 @@ index 0000000000..d8f4785a99
 +		if (!hit[m])
 +			miss |= BIT(m - LRU_CAST_TUNE_CURVE + 1);
 +	}
-+	wait = t->ra ? lru_cast_tune_ra_waits(t->ra, folio, block, miss) : miss;
++	wait = t->ra ? lru_cast_tune_ra_waits(t->ra, r->block, r->index, r->nr, miss) : miss;
 +	full = lru_cast_tune_sim_count(t->sim, LRU_CAST_TUNE_CENTER) >= t->cap;
 +	lru_cast_tune_ev_note(&t->ev, hit, wait, full);
 +	if (full)
@@ -6841,8 +7208,75 @@ index 0000000000..d8f4785a99
 +		lru_cast_tune_evaluate(t);
 +	if (t->events >= t->w.next_wtest)
 +		lru_cast_tune_w_test(&t->w, t->sim, type, t->events, t->cap);
-+out:
-+	spin_unlock_irqrestore(&lru_cast_tune_lock, flags);
++}
++
++/* the worker: every CPU's queue taken in, one after another */
++static void lru_cast_tune_drain(struct work_struct *work)
++{
++	int cpu;
++
++	for_each_possible_cpu(cpu) {
++		struct lru_cast_tune_queue *q = per_cpu_ptr(lru_cast_tune_queues, cpu);
++		unsigned int n, i;
++
++		if (!READ_ONCE(q->n))
++			continue;
++		spin_lock_irq(&q->lock);
++		n = q->n;
++		memcpy(lru_cast_tune_taken, q->rec, n * sizeof(q->rec[0]));
++		q->n = 0;
++		spin_unlock_irq(&q->lock);
++
++		mutex_lock(&lru_cast_tune_lock);
++		for (i = 0; i < n; i++) {
++			const struct lru_cast_tune_rec *r = &lru_cast_tune_taken[i];
++			struct lru_cast_tune_type *t = lru_cast_tune_types[r->type];
++
++			if (t)
++				lru_cast_tune_take(t, r);
++		}
++		mutex_unlock(&lru_cast_tune_lock);
++		cond_resched();
++	}
++}
++
++/* a read of @folio, whose block @block is in the sample (lru_cast_tune_read()): queued */
++void lru_cast_tune_event(struct folio *folio, u64 block)
++{
++	int type = folio_is_file_lru(folio);
++	struct lru_cast_tune_queue *q;
++	struct lru_cast_tune_rec r;
++	unsigned long flags;
++	unsigned int n;
++	bool taken;
++
++	if (!READ_ONCE(lru_cast_tune_types[type]))
++		return;
++
++	r = (struct lru_cast_tune_rec) {
++		.id = lru_cast_tune_sample_page(folio),
++		.block = block,
++		.index = folio->index,
++		.tick = lru_cast_ticks_now(),
++		.nr = folio_nr_pages(folio),
++		.type = type,
++	};
++	q = raw_cpu_ptr(lru_cast_tune_queues);
++	spin_lock_irqsave(&q->lock, flags);
++	n = q->n;
++	taken = n < LRU_CAST_TUNE_QUEUE;
++	if (taken) {
++		q->rec[n++] = r;
++		q->n = n;
++	}
++	spin_unlock_irqrestore(&q->lock, flags);
++	if (!taken)
++		atomic_long_inc(&lru_cast_tune_dropped);
++	else if (n == 1)
++		lru_cast_queue_delayed_work(&lru_cast_tune_drain_work, LRU_CAST_TUNE_DRAIN_DELAY);
++	else if (n == LRU_CAST_TUNE_QUEUE / 2)
++		lru_cast_mod_delayed_work(&lru_cast_tune_drain_work, 0);
++
 +	/* mapped, its next reads are caught by a protection fault */
 +	if (folio_mapped(folio))
 +		lru_cast_protect_queue(folio);
@@ -6917,31 +7351,46 @@ index 0000000000..d8f4785a99
 + *
 + * The samples are taken out from under lru_cast_tune_lock, set up again where they
 + * are, and put back: nothing reaches them meanwhile (lru_cast_tune_types[] is read under
-+ * the lock), and no memory is wanted but the first time. Short of it then,
-+ * CAST does not come on (lru_cast_set_enabled()), and tries again the next
-+ * time it is asked to.
++ * the lock), the reads queued of before dropped, and no memory is wanted but
++ * the first time. Short of it then, CAST does not come on
++ * (lru_cast_set_enabled()), and tries again the next time it is asked to.
 + */
 +int lru_cast_tune_init(void)
 +{
 +	struct lru_cast_tune_type *t[ANON_AND_FILE];
-+	unsigned long flags;
-+	int type;
++	int type, cpu;
 +
++	if (!lru_cast_tune_queues) {
++		lru_cast_tune_queues = alloc_percpu_gfp(struct lru_cast_tune_queue, LRU_CAST_TUNE_GFP);
++		if (!lru_cast_tune_queues)
++			return -ENOMEM;
++		for_each_possible_cpu(cpu)
++			spin_lock_init(&per_cpu_ptr(lru_cast_tune_queues, cpu)->lock);
++	}
 +	if (!lru_cast_tune_nslots) {
 +		lru_cast_tune_sample_init(totalram_pages());
 +		lru_cast_tune_nslots = min(LRU_CAST_TUNE_TARGET * LRU_CAST_TUNE_TABLE,
 +					   lru_cast_tune_sim_max_slots());
 +	}
 +
-+	spin_lock_irqsave(&lru_cast_tune_lock, flags);
++	mutex_lock(&lru_cast_tune_lock);
 +	for (type = 0; type < ANON_AND_FILE; type++) {
 +		t[type] = lru_cast_tune_types[type];
 +		lru_cast_tune_types[type] = NULL;
 +	}
 +	lru_cast_tune_world_reset();
 +	lru_cast_tune_share_reset();
-+	spin_unlock_irqrestore(&lru_cast_tune_lock, flags);
++	mutex_unlock(&lru_cast_tune_lock);
 +	lru_cast_tune_cost_reset();
++
++	cancel_delayed_work_sync(&lru_cast_tune_drain_work);
++	for_each_possible_cpu(cpu) {
++		struct lru_cast_tune_queue *q = per_cpu_ptr(lru_cast_tune_queues, cpu);
++
++		spin_lock_irq(&q->lock);
++		q->n = 0;
++		spin_unlock_irq(&q->lock);
++	}
 +
 +	for (type = 0; type < ANON_AND_FILE; type++)
 +		if (!t[type])
@@ -6954,10 +7403,10 @@ index 0000000000..d8f4785a99
 +	for (type = 0; type < ANON_AND_FILE; type++)
 +		lru_cast_tune_init_type(t[type], type);
 +
-+	spin_lock_irqsave(&lru_cast_tune_lock, flags);
++	mutex_lock(&lru_cast_tune_lock);
 +	for (type = 0; type < ANON_AND_FILE; type++)
 +		lru_cast_tune_types[type] = t[type];
-+	spin_unlock_irqrestore(&lru_cast_tune_lock, flags);
++	mutex_unlock(&lru_cast_tune_lock);
 +	return 0;
 +}
 +
@@ -6969,12 +7418,11 @@ index 0000000000..d8f4785a99
 +		unsigned int read[ANON_AND_FILE];
 +		struct lru_cast_tune_sim_stat st;
 +		struct lru_cast_tune_type *t;
-+		unsigned long flags;
 +
-+		spin_lock_irqsave(&lru_cast_tune_lock, flags);
++		mutex_lock(&lru_cast_tune_lock);
 +		t = lru_cast_tune_types[type];
 +		if (!t) {
-+			spin_unlock_irqrestore(&lru_cast_tune_lock, flags);
++			mutex_unlock(&lru_cast_tune_lock);
 +			continue;
 +		}
 +		len += sysfs_emit_at(buf, len,
@@ -7009,8 +7457,9 @@ index 0000000000..d8f4785a99
 +					     min(held, (unsigned long)read[type]),
 +					     t->ev.miss[m] >> 8, t->ev.dis[m] >> 8);
 +		}
-+		spin_unlock_irqrestore(&lru_cast_tune_lock, flags);
++		mutex_unlock(&lru_cast_tune_lock);
 +	}
++	len += sysfs_emit_at(buf, len, "reads dropped %ld\n", atomic_long_read(&lru_cast_tune_dropped));
 +	return len;
 +}
 diff --git a/mm/lru_cast/tune/tune.h b/mm/lru_cast/tune/tune.h
@@ -7316,7 +7765,7 @@ index 0000000000..ac9d33c024
 +#endif /* _MM_LRU_CAST_TUNE_WSHARE_H */
 diff --git a/mm/lru_cast/version.h b/mm/lru_cast/version.h
 new file mode 100644
-index 0000000000..5db0516522
+index 0000000000..0189bb1006
 --- /dev/null
 +++ b/mm/lru_cast/version.h
 @@ -0,0 +1,15 @@
@@ -7332,7 +7781,7 @@ index 0000000000..5db0516522
 +#define LRU_CAST_PROGNAME	"lru_cast"
 +#define LRU_CAST_AUTHOR	"Masahito Suzuki"
 +
-+#define LRU_CAST_VERSION	"0.2.6"
++#define LRU_CAST_VERSION	"0.2.7"
 +
 +#endif /* _MM_LRU_CAST_VERSION_H */
 diff --git a/mm/lru_cast/walk/bloom.c b/mm/lru_cast/walk/bloom.c
@@ -8577,7 +9026,7 @@ index 0000000000..8b3635caac
 +#endif /* _MM_LRU_CAST_WALK_H */
 diff --git a/mm/lru_cast/walk/young.h b/mm/lru_cast/walk/young.h
 new file mode 100644
-index 0000000000..03e0b56254
+index 0000000000..63314ed39b
 --- /dev/null
 +++ b/mm/lru_cast/walk/young.h
 @@ -0,0 +1,58 @@
@@ -8605,7 +9054,7 @@ index 0000000000..03e0b56254
 +	u32 w = lru_cast_read(folio);
 +
 +	return !(w >> 24) ||
-+	       (u8)w != (u8)lru_cast_tick(folio_pgdat(folio), folio_is_file_lru(folio));
++	       lru_cast_age(w, lru_cast_tick(folio_pgdat(folio), folio_is_file_lru(folio)));
 +}
 +
 +/*

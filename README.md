@@ -125,11 +125,13 @@ So CAST spends CPU to choose well: it records every read in the page's state wor
 
 Every page frame has one 32-bit word in a flat array indexed by its PFN — no lookup, no allocation in the hot path, backed one memory section at a time as memory comes online (1/1024 of memory). It holds the clock tick of the page's last read, the gaps back to the two reads before it (each to within a factor of two), the tag of the lruvec it belongs to, and its read count. Writes are lock-free.
 
+The tick is 8 bits and wraps, so a word not read for 192 ticks is marked stale by a sweep over the words: it keeps the tick of its read in units of 64 ticks, its key stays fixed and the page keeps ageing as any other. Before that unit could wrap — some 16 000 ticks on — the word is marked deep, older than any, and keeps only its count.
+
 ### The clock and the key
 
 Time is not wall time but pressure: the clock counts the pages the node takes in, less those their owners free, and ticks every quarter of what memory holds. While nothing comes in, nothing ages.
 
-A page's score is its reads decayed with half-life H. Because the score of every unread page decays at the same rate, the order of two unread pages never changes — so CAST ranks by a key, `E/H + log2(score)`, which changes **only when the page is read**. Nothing is re-sorted as time passes.
+A page's score is its reads decayed with half-life H. Because the score of every unread page decays at the same rate, the order of two unread pages never changes — so CAST ranks by a key, `E/H + log2(score)`, which changes **only when the page is read** — or, long unread, once when it is marked stale and once when it is marked deep. Nothing is re-sorted as time passes.
 
 ### W and M
 
@@ -157,6 +159,8 @@ Reclaim presses both types toward the split rather than taking only from the typ
 Each simulated cache is the main cache in small, ties included: pages of one key are taken in the same order as there, so that what the controllers choose is chosen for the cache they set.
 
 Pages that are mapped and sampled are made `PROT_NONE`, as NUMA balancing does, so that every read of them faults and is seen (while NUMA balancing is off).
+
+A read of a sampled page is queued on its CPU, and a worker runs the simulated caches on the queues every few milliseconds: no reader waits for a lock, and a read is dropped only when the worker falls a whole queue behind.
 
 ### Reads of mapped pages
 
@@ -225,14 +229,14 @@ Under `/sys/kernel/mm/lru_cast/`. **None needs setting**: the defaults are the d
 | `version` | — | the release |
 | `enabled` | `1` | switch CAST off and on at run time; switching it on while MGLRU is on is refused (`EBUSY`) |
 | `estimate` | — | anon's share of memory, the swappiness the measured costs amount to, the costs, the cost of writing anon out, the waits in flight, and the same per queue (the CPUs, each device) |
-| `tune` | — | the controllers: per type the decay and W's share, and each simulated cache's misses |
+| `tune` | — | the controllers: per type the decay and W's share, each simulated cache's misses, and the sampled reads dropped |
 | `decay_auto` | `1` | the controllers set the decay and W's share; `0` leaves them as set by hand |
 | `decay` | measured | the decay per type, 1–14 (half-life C·2^(8−le) pages taken in). Writing stops `decay_auto` |
 | `w_permille` | measured | W's share per type, ‰ of its pages. Writing stops `decay_auto` |
 | `clean_min_ratio` | `10` | the clean-file floor, % of a node's memory; `0` = none |
 | `floor_held` | — | reclaim passes the floor held |
 | `balance` | — | reclaim calls that took anon, file, nothing, both by size (the last pass before OOM), or both pressed toward the split |
-| `clock` | — | per node: pages taken in, pages evicted, the tick |
+| `clock` | — | per node: pages taken in, pages evicted, the tick; the words marked stale or deep, and the time the marking took (µs) |
 | `sweep` | — | the sweeps' counts: frames and words read, candidates taken and stale |
 | `walker` | `1` | the walker reads young bits of mapped pages |
 | `walker_simd` | `1` | read a page table's young bits with SIMD (x86-64) |
@@ -259,15 +263,15 @@ Patches for each supported kernel are in [`patches/`](patches/):
 
 | Kernel | Patch |
 | :--- | :--- |
-| 6.12.74 | `0001-6.12.74-lru_cast-v0.2.6.patch` |
-| 6.16.12 | `0001-6.16.12-lru_cast-v0.2.6.patch` |
-| 6.18.22 | `0001-6.18.22-lru_cast-v0.2.6.patch` |
-| 7.2.13 | `0001-7.2.13-lru_cast-v0.2.6.patch` |
-| 7.3-rc7 | `0001-7.3-rc7-lru_cast-v0.2.6.patch` |
+| 6.12.74 | `0001-6.12.74-lru_cast-v0.2.7.patch` |
+| 6.16.12 | `0001-6.16.12-lru_cast-v0.2.7.patch` |
+| 6.18.22 | `0001-6.18.22-lru_cast-v0.2.7.patch` |
+| 7.2.13 | `0001-7.2.13-lru_cast-v0.2.7.patch` |
+| 7.3-rc7 | `0001-7.3-rc7-lru_cast-v0.2.7.patch` |
 
 ```
 cd /path/to/linux
-patch -p1 < 0001-6.12.74-lru_cast-v0.2.6.patch
+patch -p1 < 0001-6.12.74-lru_cast-v0.2.7.patch
 scripts/config -e LRU_CAST
 make olddefconfig
 make -j$(nproc)
@@ -279,8 +283,8 @@ After boot:
 
 ```
 cat /sys/kernel/mm/lru_cast/enabled     # 1
-cat /sys/kernel/mm/lru_cast/version     # 0.2.6
-dmesg | grep lru_cast                   # lru_cast v0.2.6 by Masahito Suzuki
+cat /sys/kernel/mm/lru_cast/version     # 0.2.7
+dmesg | grep lru_cast                   # lru_cast v0.2.7 by Masahito Suzuki
 ```
 
 ### With MGLRU
