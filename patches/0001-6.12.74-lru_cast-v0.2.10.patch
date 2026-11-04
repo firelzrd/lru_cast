@@ -1,7 +1,7 @@
-From 29dc35b96363e9dafe203aed7eb42e3e6e866dfb Mon Sep 17 00:00:00 2001
+From d1f4e6a618965f43a6432a128a09dd8e4b58a2fd Mon Sep 17 00:00:00 2001
 From: Masahito S <firelzrd@gmail.com>
-Date: Sun, 1 Nov 2026 08:37:16 +0900
-Subject: [PATCH] 6.12.74-lru_cast-v0.2.9
+Date: Wed, 4 Nov 2026 09:55:15 +0900
+Subject: [PATCH] 6.12.74-lru_cast-v0.2.10
 
 ---
  include/linux/lru_cast.h           | 480 +++++++++++++++++
@@ -35,11 +35,11 @@ Subject: [PATCH] 6.12.74-lru_cast-v0.2.9
  mm/lru_cast/core/store.c           | 197 +++++++
  mm/lru_cast/core/store.h           |  25 +
  mm/lru_cast/hooks.c                |  28 +
- mm/lru_cast/policy/balance.c       | 246 +++++++++
+ mm/lru_cast/policy/balance.c       | 275 ++++++++++
  mm/lru_cast/policy/ghost.c         | 176 +++++++
  mm/lru_cast/policy/params.c        |  70 +++
  mm/lru_cast/policy/policy.h        |  78 +++
- mm/lru_cast/policy/reclaim.c       | 184 +++++++
+ mm/lru_cast/policy/reclaim.c       | 197 +++++++
  mm/lru_cast/policy/ring.c          | 796 +++++++++++++++++++++++++++++
  mm/lru_cast/sysfs.c                | 293 +++++++++++
  mm/lru_cast/tune/cost.c            | 504 ++++++++++++++++++
@@ -88,7 +88,7 @@ Subject: [PATCH] 6.12.74-lru_cast-v0.2.9
  mm/swap.h                          |  10 +
  mm/vmscan.c                        | 305 ++++++++++-
  mm/workingset.c                    |  31 +-
- 84 files changed, 9350 insertions(+), 23 deletions(-)
+ 84 files changed, 9392 insertions(+), 23 deletions(-)
  create mode 100644 include/linux/lru_cast.h
  create mode 100644 mm/lru_cast/Makefile
  create mode 100755 mm/lru_cast/check-layers.sh
@@ -3232,10 +3232,10 @@ index 0000000000..3393f1e192
 +}
 diff --git a/mm/lru_cast/policy/balance.c b/mm/lru_cast/policy/balance.c
 new file mode 100644
-index 0000000000..12e6906a32
+index 0000000000..88ce0a116e
 --- /dev/null
 +++ b/mm/lru_cast/policy/balance.c
-@@ -0,0 +1,246 @@
+@@ -0,0 +1,275 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * CAST -- which type to take from, and the clean-file floor.
@@ -3396,6 +3396,28 @@ index 0000000000..12e6906a32
 +}
 +
 +/*
++ * @lruvec's part of the node's anon pinned for a device: the node's pins
++ * (taken less released, in pages: gup counts both, and an unpin shows at
++ * once) by its part of the node's anon, as lru_cast_zs_part() does for
++ * zram. Pinned pages stay on the lists but reclaim cannot take them, so
++ * what anon can give is its pages less these. The count does not tell
++ * anon from file; file pinned is rare, and then anon is taken for less
++ * than it is, for as long as the pin lasts.
++ */
++static unsigned long lru_cast_pinned_part(struct lruvec *lruvec, unsigned long anon)
++{
++	struct pglist_data *pgdat = lruvec_pgdat(lruvec);
++	long pins = node_page_state(pgdat, NR_FOLL_PIN_ACQUIRED) -
++		    node_page_state(pgdat, NR_FOLL_PIN_RELEASED);
++	unsigned long node = node_page_state(pgdat, NR_ACTIVE_ANON) +
++			     node_page_state(pgdat, NR_INACTIVE_ANON);
++
++	if (pins <= 0 || !node)
++		return 0;
++	return min(anon, div64_u64((u64)min((unsigned long)pins, node) * anon, node));
++}
++
++/*
 + * The pressure on a page of each type, as a swappiness: each type's part of
 + * memory over its share, anon's against file's, no further apart than 1:199.
 + * Anon's memory is its pages on the lists and those compressed in memory.
@@ -3425,12 +3447,19 @@ index 0000000000..12e6906a32
 +			     lru_cast_lru_size(lruvec, LRU_ACTIVE_ANON);
 +	unsigned long file = lru_cast_lru_size(lruvec, LRU_INACTIVE_FILE) +
 +			     lru_cast_lru_size(lruvec, LRU_ACTIVE_FILE);
++	unsigned long pinned = 0;
 +	int pick;
 +
 +	if (swappiness <= 0)
 +		anon_ok = false;		/* never swap: at the floor, nothing */
 +	anon_ok = anon_ok && anon;
 +	file_ok = file_ok && file;
++	if (anon_ok && file_ok && priority) {
++		/* what anon can give is what is not pinned; none, and file gives (not on the last pass) */
++		pinned = lru_cast_pinned_part(lruvec, anon);
++		if (pinned >= anon)
++			anon_ok = false;
++	}
 +	if (anon_ok && file_ok) {
 +		if (swappiness == 1)		/* file to the floor first */
 +			pick = LRU_CAST_FILE;
@@ -3441,7 +3470,7 @@ index 0000000000..12e6906a32
 +		else {	/* both, pressed toward the share */
 +			if (unlikely(!lru_cast_param_share_held()))
 +				lru_cast_hold_share();
-+			lru_cast_pressure(anon + lru_cast_zs_part(lruvec, anon), file, weight);
++			lru_cast_pressure(anon - pinned + lru_cast_zs_part(lruvec, anon), file, weight);
 +			pick = LRU_CAST_BOTH;
 +		}
 +	} else if (anon_ok) {
@@ -3826,10 +3855,10 @@ index 0000000000..ad9271c982
 +#endif /* _MM_LRU_CAST_POLICY_H */
 diff --git a/mm/lru_cast/policy/reclaim.c b/mm/lru_cast/policy/reclaim.c
 new file mode 100644
-index 0000000000..22e9c49620
+index 0000000000..c598c51651
 --- /dev/null
 +++ b/mm/lru_cast/policy/reclaim.c
-@@ -0,0 +1,184 @@
+@@ -0,0 +1,197 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * CAST -- the choice of victims.
@@ -3958,6 +3987,19 @@ index 0000000000..22e9c49620
 +		scan += nr_pages;
 +		if (!folio_test_lru(folio) || (!s->may_unmap && folio_mapped(folio)))
 +			goto aside;
++		/*
++		 * Pinned for a device (FOLL_LONGTERM: CUDA, io_uring, RDMA): the
++		 * unmap fails, and the folio would go back to M under the same
++		 * key, still the lowest, for reclaim to take again -- the CPU
++		 * does not read it, so nothing lifts it. Lift it, as program
++		 * text in use is: it is in use, and a victim must be one that
++		 * can go. (How much of a type is pinned, lru_cast_pick() reads
++		 * off the node's pin counts.)
++		 */
++		if (unlikely(folio_maybe_dma_pinned(folio))) {
++			lru_cast_access_kept(folio);
++			goto aside;
++		}
 +		if (unlikely(!folio_try_get(folio)))
 +			goto aside;
 +		if (!folio_test_clear_lru(folio)) {
@@ -8079,7 +8121,7 @@ index 0000000000..ac9d33c024
 +#endif /* _MM_LRU_CAST_TUNE_WSHARE_H */
 diff --git a/mm/lru_cast/version.h b/mm/lru_cast/version.h
 new file mode 100644
-index 0000000000..f1eb1c78ea
+index 0000000000..54c5702905
 --- /dev/null
 +++ b/mm/lru_cast/version.h
 @@ -0,0 +1,15 @@
@@ -8095,7 +8137,7 @@ index 0000000000..f1eb1c78ea
 +#define LRU_CAST_PROGNAME	"lru_cast"
 +#define LRU_CAST_AUTHOR	"Masahito Suzuki"
 +
-+#define LRU_CAST_VERSION	"0.2.9"
++#define LRU_CAST_VERSION	"0.2.10"
 +
 +#endif /* _MM_LRU_CAST_VERSION_H */
 diff --git a/mm/lru_cast/walk/bloom.c b/mm/lru_cast/walk/bloom.c
