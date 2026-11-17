@@ -196,7 +196,7 @@ cpu: anon 3667 ns (20692922) file 0 ns (0) swap-out 2696 ns (21034646)
 bdi 9: anon 0 ns (0) file 350346 ns (15035) swap-out 0 ns (0)
 ```
 
-Here anon is swapped to zram, read back on the CPU in under 4 µs, and file is read from a disk at 350 µs: the cache keeps file. Anon's part of memory counts what zram or zswap holds compressed as well as its pages on the lists — a page swapped to zram frees only what compressing it saves.
+Here anon is swapped to zram, read back on the CPU in under 4 µs, and file is read from a disk at 350 µs: the cache keeps file. Each type's part of memory is its pages on the lists, as the curves count it: a page swapped to zram or zswap is evicted, and its refault is a miss the curves already weigh.
 
 Three values of `vm.swappiness` are promises, kept outside the measurement:
 
@@ -265,15 +265,16 @@ Patches for each supported kernel are in [`patches/`](patches/):
 
 | Kernel | Patch |
 | :--- | :--- |
-| 6.12.74 | `0001-6.12.74-lru_cast-v0.2.8.patch` |
-| 6.16.12 | `0001-6.16.12-lru_cast-v0.2.8.patch` |
-| 6.18.22 | `0001-6.18.22-lru_cast-v0.2.8.patch` |
-| 7.2.13 | `0001-7.2.13-lru_cast-v0.2.8.patch` |
-| 7.3-rc7 | `0001-7.3-rc7-lru_cast-v0.2.8.patch` |
+| 6.12.74 | `0001-6.12.74-lru_cast-v0.2.11.patch` |
+| 6.16.12 | `0001-6.16.12-lru_cast-v0.2.11.patch` |
+| 6.18.22 | `0001-6.18.22-lru_cast-v0.2.11.patch` |
+| 7.2.13 | `0001-7.2.13-lru_cast-v0.2.11.patch` |
+| 7.3-rc7 | `0001-7.3-rc7-lru_cast-v0.2.11.patch` |
+| 7.4-rc1 | `0001-7.4-rc1-lru_cast-v0.2.11.patch` |
 
 ```
 cd /path/to/linux
-patch -p1 < 0001-6.12.74-lru_cast-v0.2.8.patch
+patch -p1 < 0001-6.12.74-lru_cast-v0.2.11.patch
 scripts/config -e LRU_CAST
 make olddefconfig
 make -j$(nproc)
@@ -285,8 +286,8 @@ After boot:
 
 ```
 cat /sys/kernel/mm/lru_cast/enabled     # 1
-cat /sys/kernel/mm/lru_cast/version     # 0.2.8
-dmesg | grep lru_cast                   # lru_cast v0.2.8 by Masahito Suzuki
+cat /sys/kernel/mm/lru_cast/version     # 0.2.11
+dmesg | grep lru_cast                   # lru_cast v0.2.11 by Masahito Suzuki
 ```
 
 ### With MGLRU
